@@ -22,6 +22,8 @@ import { simplificationPacksRoutes } from './routes/simplification-packs';
 import { classroomRoutes } from './routes/classroom';
 import { offlineRoutes } from './routes/offline';
 import { enterpriseRoutes } from './routes/enterprise';
+import { developerRoutes } from './routes/developer';
+import { ltiRoutes } from './routes/lti';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -82,6 +84,8 @@ api.route('/packs', simplificationPacksRoutes);
 api.route('/classroom', classroomRoutes);
 api.route('/offline', offlineRoutes);
 api.route('/enterprise', enterpriseRoutes);
+api.route('/developer', developerRoutes);
+api.route('/lti', ltiRoutes);
 
 // Error handling
 app.onError(errorHandler);

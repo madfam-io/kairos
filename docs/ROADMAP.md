@@ -76,7 +76,7 @@ Free (beta period)
 | "Classroom Mode" for tutors | P1 | Implemented |
 | Pre-simplified packs (50+ shows) | P1 | Implemented |
 | Leaderboards + social features | P2 | Implemented |
-| API for third-party integrations | P2 | Planned |
+| API for third-party integrations | P2 | Implemented |
 | Affiliate/referral program | P1 | Implemented |
 
 ### Milestones
@@ -251,9 +251,19 @@ Month 4+: Growth Phase
 - Comprehensive audit logging
 - License management and history
 
+**Third-Party API Integrations:**
+- OAuth2 authorization code flow with PKCE
+- API key authentication for server-to-server
+- Developer portal for app registration
+- Webhook system with delivery tracking and retries
+- LTI 1.3 integration for LMS (Canvas, Blackboard, Moodle)
+- External integrations (Notion, Readwise, Obsidian, Anki Connect)
+- API usage analytics and rate limiting
+- Comprehensive documentation and scopes
+
 ### Planned
 
-- Third-party API integrations
+All major planned features have been implemented!
 
 ---
 
