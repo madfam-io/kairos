@@ -770,3 +770,785 @@ Communication:
 | **OCR** | Optical Character Recognition - extracting text from images |
 | **VAD** | Voice Activity Detection - identifying speech in audio |
 | **CRDT** | Conflict-free Replicated Data Type - for offline-first sync |
+
+-----
+
+## Appendix C: BMAD Analysis
+
+### C.1 Business Model Deep-Dive
+
+#### C.1.1 Financial Projections (24-Month)
+
+```
+Revenue Model: SaaS Subscription
+
+Month     Users    Paid    Conv%   MRR        ARR         Burn      Runway
+──────────────────────────────────────────────────────────────────────────
+M1        500      0       0%      $0         $0          $15K      18mo
+M2        2,000    0       0%      $0         $0          $15K      17mo
+M3        5,000    250     5%      $2,250     $27K        $18K      15mo
+M4        8,000    480     6%      $4,320     $52K        $20K      14mo
+M5        12,000   780     6.5%    $7,020     $84K        $22K      13mo
+M6        18,000   1,260   7%      $11,340    $136K       $25K      12mo
+──────────────────────────────────────────────────────────────────────────
+M7        25,000   1,875   7.5%    $16,875    $203K       $28K      12mo
+M8        32,000   2,560   8%      $23,040    $276K       $30K      13mo
+M9        40,000   3,400   8.5%    $30,600    $367K       $32K      14mo
+M10       48,000   4,320   9%      $38,880    $467K       $35K      15mo
+M11       55,000   5,225   9.5%    $47,025    $564K       $38K      16mo
+M12       65,000   6,500   10%     $58,500    $702K       $40K      18mo
+──────────────────────────────────────────────────────────────────────────
+M18       120,000  14,400  12%     $129,600   $1.56M      $55K      24mo+
+M24       200,000  28,000  14%     $252,000   $3.02M      $75K      36mo+
+
+Assumptions:
+- Average Revenue Per User (ARPU): $9/mo (blend of $8 Learner + $12 Immersion)
+- Monthly churn: 6% (M1-6), 5% (M7-12), 4% (M13+)
+- Viral coefficient: 0.3 (each user brings 0.3 new users)
+- Paid marketing spend: $0 (M1-3), $5K/mo (M4-6), $15K/mo (M7+)
+```
+
+#### C.1.2 Cost Structure
+
+```
+Monthly Operating Costs (at scale: 10K paid users)
+
+INFRASTRUCTURE                          MONTHLY COST
+├── Supabase (Pro)                      $25
+├── Cloudflare Workers (Pro)            $20
+├── Upstash Redis                       $50
+├── Modal (GPU inference)               $800
+├── Vercel (marketing site)             $20
+├── Domain + SSL                        $5
+└── Subtotal                            $920
+
+THIRD-PARTY SERVICES
+├── Sentry (errors)                     $26
+├── PostHog (analytics)                 $0 (free tier)
+├── Axiom (logging)                     $25
+├── Better Uptime                       $20
+├── Stripe fees (2.9% + $0.30)          ~$2,700
+└── Subtotal                            $2,771
+
+TEAM (assuming bootstrapped start)
+├── Founder salary                      $0 (equity only, M1-6)
+├── Contract developer (part-time)      $4,000
+├── Design contractor                   $1,500
+└── Subtotal                            $5,500
+
+MARKETING
+├── Content creation                    $500
+├── YouTube sponsorships                $2,000
+├── Community management                $500
+└── Subtotal                            $3,000
+
+TOTAL MONTHLY BURN                      ~$12,200 (early stage)
+                                        ~$40,000 (at 10K users)
+```
+
+#### C.1.3 Funding Strategy
+
+| Stage | Amount | Use of Funds | Milestone to Raise |
+| :--- | :--- | :--- | :--- |
+| **Bootstrap** | $50K (savings) | MVP development, beta launch | - |
+| **Pre-seed** | $150K (angels) | 6-month runway, first hires | 1,000 paid users, $9K MRR |
+| **Seed** | $750K-1M | Scale team to 5, aggressive growth | 5,000 paid users, $50K MRR |
+| **Series A** | $3-5M | International expansion, Japanese launch | 25K paid users, $250K MRR |
+
+**Ideal Investor Profile:**
+- EdTech or language learning experience
+- Consumer SaaS background
+- Connections to Chinese/Asian markets
+- Patient capital (education is slow-burn)
+
+#### C.1.4 Team Composition
+
+**Phase 1 (Bootstrap): 1-2 people**
+```
+Founder/CEO
+├── Product vision, architecture
+├── Core development (Rust/TypeScript)
+├── Community building
+└── Everything else
+
+Contractor: UI/UX Designer ($50/hr, 20hr/mo)
+```
+
+**Phase 2 (Pre-seed): 3-4 people**
+```
+Founder/CEO
+├── Product, fundraising, strategy
+
+Full-stack Engineer
+├── Browser extension, desktop app
+├── API development
+
+ML/AI Engineer (part-time → full-time)
+├── Model fine-tuning
+├── Inference optimization
+├── PaddleNLP/OCR integration
+
+Designer (contract → part-time)
+├── UI/UX, brand identity
+```
+
+**Phase 3 (Seed): 6-8 people**
+```
+Founder/CEO
+├── Strategy, fundraising, partnerships
+
+CTO/Lead Engineer
+├── Architecture, hiring, technical vision
+
+2x Full-stack Engineers
+├── Feature development, platform expansion
+
+ML Engineer
+├── Model optimization, new AI features
+
+Designer
+├── Full-time, product + marketing
+
+Community/Marketing Lead
+├── Content, partnerships, support
+
+Part-time: Customer support, QA
+```
+
+#### C.1.5 Key Hires & Timing
+
+| Role | When | Why Critical | Salary Range |
+| :--- | :--- | :--- | :--- |
+| ML Engineer | Month 3 | AI features are core differentiator | $120-180K |
+| Mobile Developer | Month 4 | Phase 2 requires iOS/Android | $100-150K |
+| Community Lead | Month 5 | GTM requires dedicated attention | $60-90K |
+| DevOps/SRE | Month 8 | Scale reliability | $130-170K |
+
+-----
+
+### C.2 Market Analysis Deep-Dive
+
+#### C.2.1 Market Sizing (TAM/SAM/SOM)
+
+```
+TOTAL ADDRESSABLE MARKET (TAM): Global Language Learning
+├── Market size (2024): $67B
+├── Growth rate: 18% CAGR
+├── Online segment: $25B
+└── Relevant: Language learning software
+
+SERVICEABLE ADDRESSABLE MARKET (SAM): Chinese Learners + Immersion Tools
+├── Chinese learners worldwide: ~100M
+├── Serious learners (HSK 3+): ~15M
+├── Using digital tools: ~10M
+├── Willing to pay for software: ~3M
+├── Average spend: $100/year
+└── SAM: $300M/year
+
+SERVICEABLE OBTAINABLE MARKET (SOM): Year 1-3 Realistic Target
+├── Immersion-method learners: ~500K
+├── Reachable via our channels: ~200K
+├── Conversion to trial: 10% = 20K
+├── Conversion to paid: 30% = 6K
+├── Year 1 SOM: 6,000 users × $100 = $600K
+├── Year 3 SOM (5% of SAM willing-to-pay): 150K users = $15M
+```
+
+#### C.2.2 Market Validation Approach
+
+**Before Building (Weeks -8 to -4):**
+
+| Validation | Method | Success Criteria |
+| :--- | :--- | :--- |
+| Problem validation | 20 user interviews (r/ChineseLanguage, Discord) | 15+ confirm segmentation pain point |
+| Solution validation | Clickable prototype, 5 user tests | 4+ say "I would pay for this" |
+| Pricing validation | Survey (n=100) with price anchoring | >50% accept $8/mo, >30% accept $12/mo |
+| Channel validation | Post in 3 communities, measure engagement | >100 upvotes, >50 comments |
+
+**During Beta (Months 1-3):**
+
+| Metric | Method | Target |
+| :--- | :--- | :--- |
+| Activation rate | % completing first mining session | >60% |
+| Retention | Week 1 return rate | >40% |
+| NPS | In-app survey at Day 7 | >40 |
+| Willingness to pay | "Would you pay $8/mo?" prompt | >30% "Yes" |
+
+**User Interview Script (Problem Discovery):**
+
+```markdown
+1. Tell me about your Chinese learning journey. What level are you at?
+2. What content do you use for immersion? (Netflix, YouTube, etc.)
+3. Walk me through the last time you tried to watch something in Chinese.
+4. What tools do you currently use? (Migaku, LR, Anki, etc.)
+5. What's the most frustrating part of your current workflow?
+6. [If they mention segmentation] Can you show me an example?
+7. How much time do you spend on immersion per week?
+8. Have you ever paid for language learning tools? How much?
+9. If a tool could do [X], how valuable would that be to you?
+10. Is there anything else I should know about your learning process?
+```
+
+#### C.2.3 Competitive Intelligence
+
+**Migaku Deep-Dive:**
+
+| Aspect | Details | Our Counter |
+| :--- | :--- | :--- |
+| **Pricing** | $10/mo or $96/year | Match on Immersion tier, undercut on Learner |
+| **Strengths** | Brand recognition, multi-language, Refold partnership | Focus on Chinese-only excellence |
+| **Weaknesses** | Chinese segmentation broken, complex UI, no AI | Our core differentiators |
+| **User complaints** | "Setup takes forever", "Chinese doesn't work", "Too expensive" | Zero-config, Chinese-first, value pricing |
+| **Churn reasons** | Feature bloat, technical issues, subscription fatigue | Simplicity, reliability, fair pricing |
+
+**Language Reactor Deep-Dive:**
+
+| Aspect | Details | Our Counter |
+| :--- | :--- | :--- |
+| **Pricing** | Free + $5/mo Pro | Free tier competitive, Pro significantly better |
+| **Strengths** | Easy onboarding, familiar UI, free tier | Match ease, exceed features |
+| **Weaknesses** | Abandonware (no updates 2+ years), no Chinese optimization | Active development, Chinese-first |
+| **User complaints** | "Broken on new Netflix", "Chinese parsing useless" | Rapid updates, PaddleNLP |
+
+#### C.2.4 User Research Repository
+
+**Persona Deep-Dive: Liam (Plateaued Intermediate)**
+
+```yaml
+Demographics:
+  Age: 25-35
+  Location: US, UK, Australia
+  Occupation: Knowledge worker, student
+  Income: $40-80K
+
+Chinese Journey:
+  Started: 2-4 years ago
+  Current level: HSK 4 (self-assessed)
+  Goal: Conversational fluency for travel/work
+  Weekly study time: 5-10 hours
+
+Current Stack:
+  - Anki (daily, 30min)
+  - HelloChinese (completed)
+  - Tried Migaku (quit: too complex)
+  - Tried Language Reactor (quit: Chinese broken)
+  - YouTube: Comprehensible Chinese, Mandarin Corner
+
+Pain Points (verbatim quotes):
+  - "I know 2000 characters but I can't watch a drama without pausing constantly"
+  - "Setting up sentence mining took me a whole weekend"
+  - "The segmentation is always wrong on names"
+  - "I want to watch The Untamed but it's too hard"
+
+Desired Outcome:
+  - Watch C-dramas with understanding
+  - Build vocabulary naturally
+  - Feel progress, not frustration
+
+Willingness to Pay:
+  - Currently pays: $0-5/mo on tools
+  - Would pay: Up to $15/mo for "something that actually works"
+
+Channels:
+  - Reddit: r/ChineseLanguage (daily)
+  - Discord: Refold, Heavenly Path
+  - YouTube: Language learning content
+```
+
+**Persona Deep-Dive: Sarah (Efficient Professional)**
+
+```yaml
+Demographics:
+  Age: 30-45
+  Location: US, EU, Singapore
+  Occupation: Tech professional, consultant, executive
+  Income: $100-200K
+
+Chinese Journey:
+  Started: 1-3 years ago
+  Current level: HSK 3-4
+  Goal: Business proficiency, cultural fluency
+  Weekly study time: 3-5 hours (time-constrained)
+
+Current Stack:
+  - Paid tutor on iTalki ($40/hr, 2x/week)
+  - Pleco (dictionary)
+  - Tried various apps (abandoned)
+  - Occasional YouTube/Netflix
+
+Pain Points (verbatim quotes):
+  - "I don't have time to configure tools"
+  - "I just want to click and start learning"
+  - "My tutor says I should watch more content but it's too hard"
+  - "I'll pay for something that saves me time"
+
+Desired Outcome:
+  - Efficient learning (maximize output per hour)
+  - Seamless workflow (no setup friction)
+  - Measurable progress (data-driven)
+
+Willingness to Pay:
+  - Currently pays: $200+/mo on learning
+  - Would pay: $20+/mo for excellent tool
+
+Channels:
+  - LinkedIn
+  - Hacker News
+  - Tech podcasts
+  - Word of mouth from other learners
+```
+
+-----
+
+### C.3 Architecture Expansion
+
+#### C.3.1 Security Architecture
+
+```
+SECURITY LAYERS
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        EDGE LAYER                                │
+│  Cloudflare: DDoS protection, WAF, bot detection, rate limiting │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────┐
+│                      APPLICATION LAYER                           │
+│  - Input validation (zod schemas)                                │
+│  - Output encoding (XSS prevention)                              │
+│  - CSRF tokens (SameSite cookies)                               │
+│  - Content Security Policy headers                               │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────┐
+│                    AUTHENTICATION LAYER                          │
+│  - JWT with short expiry (15min access, 7day refresh)           │
+│  - Secure cookie storage (HttpOnly, Secure, SameSite)           │
+│  - OAuth 2.0 + PKCE for third-party auth                        │
+│  - Rate limiting on auth endpoints (5 attempts/min)             │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────┐
+│                    AUTHORIZATION LAYER                           │
+│  - Row-Level Security (RLS) in PostgreSQL                       │
+│  - Subscription tier validation middleware                       │
+│  - Resource ownership verification                               │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────┐
+│                        DATA LAYER                                │
+│  - Encryption at rest (AES-256, Supabase default)               │
+│  - Encryption in transit (TLS 1.3)                              │
+│  - PII minimization (hash emails for analytics)                 │
+│  - Automated backups (daily, 30-day retention)                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Security Checklist (Pre-Launch):**
+
+- [ ] OWASP Top 10 audit
+- [ ] Dependency vulnerability scan (npm audit, cargo audit)
+- [ ] Penetration testing (basic, self or contractor)
+- [ ] Privacy policy and ToS reviewed by lawyer
+- [ ] GDPR compliance verification
+- [ ] Data deletion workflow tested
+- [ ] Incident response plan documented
+- [ ] Security headers verified (securityheaders.com)
+
+#### C.3.2 CI/CD Pipeline
+
+```yaml
+# .github/workflows/main.yml (conceptual)
+
+TRIGGER: Push to main, PR to main
+
+PIPELINE STAGES:
+
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    LINT     │────▶│    TEST     │────▶│    BUILD    │
+│  (2 min)    │     │  (5 min)    │     │  (3 min)    │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                               │
+                    ┌──────────────────────────┼──────────────────────────┐
+                    ▼                          ▼                          ▼
+            ┌─────────────┐            ┌─────────────┐            ┌─────────────┐
+            │  EXTENSION  │            │   DESKTOP   │            │   MOBILE    │
+            │   BUILD     │            │    BUILD    │            │   BUILD     │
+            │  (Chrome,   │            │  (Win/Mac/  │            │ (iOS/And)   │
+            │   Firefox)  │            │   Linux)    │            │             │
+            └──────┬──────┘            └──────┬──────┘            └──────┬──────┘
+                   │                          │                          │
+                   ▼                          ▼                          ▼
+            ┌─────────────┐            ┌─────────────┐            ┌─────────────┐
+            │   E2E TEST  │            │   E2E TEST  │            │   E2E TEST  │
+            │ (Playwright)│            │  (Tauri)    │            │  (Detox)    │
+            └──────┬──────┘            └──────┬──────┘            └──────┬──────┘
+                   │                          │                          │
+                   └──────────────────────────┼──────────────────────────┘
+                                              ▼
+                                      ┌─────────────┐
+                                      │   DEPLOY    │
+                                      │  (Staging)  │
+                                      └──────┬──────┘
+                                              │
+                                      ┌───────▼───────┐
+                                      │  SMOKE TEST   │
+                                      │   (Staging)   │
+                                      └───────┬───────┘
+                                              │
+                              ┌───────────────┼───────────────┐
+                              ▼               ▼               ▼
+                      [Manual QA]    [Canary Deploy]   [Full Deploy]
+                                         (10%)           (100%)
+
+ENVIRONMENTS:
+- Development: Local, hot reload
+- Staging: staging.kairos.app (auto-deploy from main)
+- Production: app.kairos.app (manual promotion from staging)
+```
+
+**Deployment Strategy:**
+
+| Component | Deployment Method | Rollback Time |
+| :--- | :--- | :--- |
+| API | Cloudflare Workers (instant) | <1 min |
+| Web app | Vercel (instant) | <1 min |
+| Desktop app | GitHub Releases + auto-update | 1 hour (user-initiated) |
+| Browser extension | Chrome/Firefox stores | 1-3 days (store review) |
+| Mobile app | App Store/Play Store | 1-7 days (store review) |
+
+#### C.3.3 Testing Strategy
+
+```
+TEST PYRAMID
+
+                    ┌───────────┐
+                    │    E2E    │  5%   - Critical user journeys
+                    │  (Slow)   │        - Real browser/device
+                    ├───────────┤
+                    │Integration│ 20%   - API contract tests
+                    │  (Medium) │        - Database integration
+                    │           │        - External service mocks
+                    ├───────────┤
+                    │   Unit    │ 75%   - Business logic
+                    │  (Fast)   │        - Pure functions
+                    │           │        - Component rendering
+                    └───────────┘
+
+COVERAGE TARGETS:
+- Unit tests: >80% line coverage
+- Integration tests: All API endpoints
+- E2E tests: 10 critical paths
+```
+
+**Critical E2E Test Scenarios:**
+
+1. **New user onboarding**: Install extension → Create account → First mining session
+2. **Subscription flow**: Free user → Select tier → Stripe checkout → Access premium
+3. **Mining workflow**: Watch video → Click word → Generate card → Export to Anki
+4. **AI simplification**: Enable simplified mode → Verify correct HSK level output
+5. **Cross-device sync**: Mine on desktop → Verify appears on mobile
+6. **Offline resilience**: Go offline → Mine cards → Come online → Sync
+7. **Extension recovery**: Netflix DOM change → Graceful degradation message
+8. **Account management**: Change password → Delete account → Verify data removal
+
+#### C.3.4 Performance Budgets
+
+| Metric | Budget | Measurement |
+| :--- | :--- | :--- |
+| **Extension load time** | <500ms | Time from page load to overlay ready |
+| **First contentful paint (marketing)** | <1.5s | Lighthouse |
+| **API response (P95)** | <200ms | Datadog/Grafana |
+| **Segmentation latency** | <100ms (WASM), <300ms (cloud) | In-app telemetry |
+| **OCR latency** | <500ms | In-app telemetry |
+| **LLM simplification** | <1.5s (first), <500ms (cached) | In-app telemetry |
+| **Extension bundle size** | <500KB (gzipped) | Build output |
+| **Desktop app size** | <50MB (installer) | Build output |
+| **Mobile app size** | <30MB | App store listing |
+
+-----
+
+### C.4 Development Process
+
+#### C.4.1 Sprint Structure
+
+```
+SPRINT CADENCE: 2 weeks
+
+Week 1:
+├── Monday: Sprint planning (2hr)
+│   ├── Review backlog
+│   ├── Estimate stories (t-shirt sizing)
+│   └── Commit to sprint goal
+├── Tue-Thu: Development
+│   ├── Daily async standup (Slack)
+│   └── Pair programming sessions
+└── Friday: Mid-sprint check-in (30min)
+
+Week 2:
+├── Mon-Wed: Development + QA
+├── Thursday:
+│   ├── Code freeze (noon)
+│   ├── QA verification
+│   └── Staging deployment
+└── Friday:
+    ├── Sprint review/demo (1hr)
+    ├── Retrospective (1hr)
+    └── Production deployment
+
+CEREMONIES:
+- Planning: Define what we build
+- Daily standup: Async, blockers only
+- Review: Demo to stakeholders
+- Retro: What to improve
+```
+
+#### C.4.2 Story Template
+
+```markdown
+## User Story
+
+**As a** [persona],
+**I want to** [action],
+**So that** [benefit].
+
+## Acceptance Criteria
+
+- [ ] Given [context], when [action], then [outcome]
+- [ ] Given [context], when [action], then [outcome]
+- [ ] Edge case: [description]
+
+## Technical Notes
+
+- Affected components: [list]
+- API changes: [yes/no, details]
+- Database changes: [yes/no, migration needed]
+- Dependencies: [blocked by X, blocks Y]
+
+## Design
+
+- Figma link: [url]
+- Screenshot: [attached]
+
+## Definition of Done
+
+- [ ] Code complete and self-reviewed
+- [ ] Unit tests written (>80% coverage for new code)
+- [ ] Integration tests updated
+- [ ] Documentation updated
+- [ ] PR approved by 1+ reviewer
+- [ ] QA verified on staging
+- [ ] No P0/P1 bugs
+- [ ] Analytics events added
+- [ ] Feature flag configured (if applicable)
+```
+
+#### C.4.3 Code Quality Standards
+
+```typescript
+// CODING STANDARDS
+
+// 1. TypeScript strict mode (always)
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true
+  }
+}
+
+// 2. Error handling pattern
+// BAD:
+try {
+  await riskyOperation();
+} catch (e) {
+  console.log(e); // Lost error
+}
+
+// GOOD:
+import { Result, ok, err } from 'neverthrow';
+
+async function riskyOperation(): Promise<Result<Data, AppError>> {
+  try {
+    const data = await fetchData();
+    return ok(data);
+  } catch (e) {
+    logger.error('Operation failed', { error: e });
+    return err(new AppError('FETCH_FAILED', e));
+  }
+}
+
+// 3. Component structure (React)
+// - One component per file
+// - Props interface defined and exported
+// - Hooks extracted to custom hooks when >10 lines
+// - No inline styles (use Tailwind or CSS modules)
+
+// 4. API response format (consistent)
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+  meta?: {
+    pagination?: { page: number; limit: number; total: number };
+  };
+}
+
+// 5. Commit message format (Conventional Commits)
+// type(scope): description
+//
+// feat(mining): add batch export to Anki
+// fix(segmentation): handle proper nouns correctly
+// docs(readme): update installation instructions
+// refactor(api): extract auth middleware
+// test(e2e): add subscription flow test
+```
+
+#### C.4.4 Technical Debt Management
+
+```markdown
+## Tech Debt Tracking
+
+CATEGORIES:
+- 🔴 Critical: Blocks features or causes outages
+- 🟠 High: Slows development significantly
+- 🟡 Medium: Annoying but workable
+- 🟢 Low: Nice to fix someday
+
+PROCESS:
+1. Add tech debt items to backlog with [DEBT] prefix
+2. Allocate 20% of each sprint to debt reduction
+3. Review debt backlog monthly
+4. Escalate 🔴 items immediately
+
+CURRENT DEBT REGISTER:
+| ID | Category | Description | Impact | Effort |
+|----|----------|-------------|--------|--------|
+| TD-001 | 🟠 | No retry logic on LLM calls | User errors | 2 days |
+| TD-002 | 🟡 | Inconsistent error messages | Confusion | 1 day |
+| TD-003 | 🟢 | Legacy CSS in components | Tech debt | 3 days |
+```
+
+#### C.4.5 On-Call & Incident Response
+
+```
+ON-CALL ROTATION (post-launch)
+
+Schedule: Weekly rotation
+Hours: 9am-9pm user timezone (initially)
+Escalation: Slack → Phone after 15min
+
+SEVERITY LEVELS:
+
+SEV-1 (Critical): Service down, data loss
+├── Response: 15 min
+├── Resolution: 4 hours
+├── Postmortem: Required
+└── Example: API returning 500s for all users
+
+SEV-2 (High): Major feature broken
+├── Response: 1 hour
+├── Resolution: 24 hours
+├── Postmortem: Required
+└── Example: Mining not working, AI simplification broken
+
+SEV-3 (Medium): Minor feature broken
+├── Response: 4 hours
+├── Resolution: 72 hours
+├── Postmortem: Optional
+└── Example: Specific browser version issue
+
+SEV-4 (Low): Cosmetic/minor issue
+├── Response: Next business day
+├── Resolution: Next sprint
+├── Postmortem: No
+└── Example: Typo in UI, minor alignment issue
+
+INCIDENT TEMPLATE:
+1. Detect: How was it found?
+2. Triage: What's the severity?
+3. Communicate: Status page update, user notification
+4. Mitigate: Stop the bleeding
+5. Resolve: Fix the root cause
+6. Postmortem: What do we learn?
+```
+
+-----
+
+### C.5 Launch Checklist
+
+#### C.5.1 Pre-Launch (T-2 weeks)
+
+**Product:**
+- [ ] All P0 features complete
+- [ ] No P0/P1 bugs in backlog
+- [ ] Performance budgets met
+- [ ] Accessibility audit passed
+- [ ] Localization complete (EN, ZH-Hans)
+
+**Infrastructure:**
+- [ ] Production environment provisioned
+- [ ] SSL certificates configured
+- [ ] CDN configured and tested
+- [ ] Database backups verified
+- [ ] Monitoring dashboards live
+- [ ] Alerting configured and tested
+- [ ] Load testing completed (2x expected traffic)
+
+**Security:**
+- [ ] Security audit completed
+- [ ] Penetration test passed
+- [ ] Privacy policy published
+- [ ] Terms of Service published
+- [ ] GDPR compliance verified
+- [ ] Data deletion workflow tested
+
+**Legal:**
+- [ ] Company incorporated
+- [ ] Trademarks filed (if applicable)
+- [ ] Stripe account verified
+- [ ] App store developer accounts active
+
+#### C.5.2 Launch Day (T-0)
+
+**Morning:**
+- [ ] Final staging verification
+- [ ] Production deployment
+- [ ] Smoke tests passed
+- [ ] Team on standby (all hands)
+
+**Go-Live:**
+- [ ] Feature flags enabled
+- [ ] Status page: "Operational"
+- [ ] Social media announcements
+- [ ] Email to waitlist
+- [ ] Reddit/Discord posts
+- [ ] Product Hunt submission (if coordinated)
+
+**Monitoring:**
+- [ ] Error rate dashboard open
+- [ ] Real-time user count visible
+- [ ] Support queue monitored
+- [ ] Social media monitored
+
+#### C.5.3 Post-Launch (T+1 to T+7)
+
+**Day 1:**
+- [ ] Review error logs
+- [ ] Respond to all support tickets
+- [ ] Fix any critical bugs
+- [ ] Thank early users publicly
+
+**Day 2-3:**
+- [ ] Analyze activation funnel
+- [ ] Interview 5 new users
+- [ ] Prioritize feedback
+
+**Week 1:**
+- [ ] Publish "Week 1" retrospective
+- [ ] Plan first post-launch sprint
+- [ ] Review metrics vs. targets
