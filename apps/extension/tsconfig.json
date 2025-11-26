@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./src/*"],
+      "@kairos/types": ["../../packages/types/src"]
+    },
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*", ".plasmo/**/*"],
+  "exclude": ["node_modules", "build"],
+  "references": [
+    { "path": "../../packages/types" }
+  ]
+}
