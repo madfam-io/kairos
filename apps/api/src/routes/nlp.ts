@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AppEnv, AuthenticatedEnv } from '../types';
 import { requireAuth, requireSubscription, optionalAuth } from '../middleware/auth';
 import { AppError } from '../middleware/error-handler';
+import { getNLPClient } from '../services/nlp-client';
 
 export const nlpRoutes = new Hono<AppEnv>();
 
@@ -58,27 +59,56 @@ nlpRoutes.post('/segment', optionalAuth(), zValidator('json', segmentSchema), as
   const { text, knownWords, detectAmbiguity } = c.req.valid('json');
   const startTime = Date.now();
 
-  // TODO: Call PaddleNLP service on Modal
-  // For now, return a simple character-by-character segmentation
-  const segments = text.split('').map((char, index) => ({
-    text: char,
-    pinyin: null,
-    definition: null,
-    hskLevel: null,
-    isProperNoun: false,
-    isKnown: knownWords?.includes(char) ?? false,
-    startIndex: index,
-    endIndex: index + 1,
-  }));
+  try {
+    const nlpClient = getNLPClient();
+    const result = await nlpClient.segment(text);
 
-  return c.json({
-    success: true,
-    data: {
-      segments,
-      rawText: text,
-      processingTimeMs: Date.now() - startTime,
-    },
-  });
+    // Transform response and add known word status
+    const segments = result.segments.map((seg, index) => ({
+      text: seg.text,
+      pinyin: seg.pinyin,
+      toneMarks: seg.tone_marks,
+      definitions: seg.definitions,
+      hskLevel: seg.hsk_level,
+      pos: seg.pos,
+      isPunctuation: seg.is_punctuation,
+      isKnown: knownWords?.includes(seg.text) ?? false,
+    }));
+
+    return c.json({
+      success: true,
+      data: {
+        segments,
+        rawText: result.original_text,
+        wordCount: result.word_count,
+        processingTimeMs: Date.now() - startTime,
+      },
+    });
+  } catch (error) {
+    // Fallback to character-by-character if NLP service unavailable
+    console.error('NLP service error, using fallback:', error);
+    const segments = text.split('').map((char, index) => ({
+      text: char,
+      pinyin: null,
+      toneMarks: null,
+      definitions: [],
+      hskLevel: null,
+      pos: null,
+      isPunctuation: /[\s\u3000-\u303F\uFF00-\uFFEF.,!?;:]/.test(char),
+      isKnown: knownWords?.includes(char) ?? false,
+    }));
+
+    return c.json({
+      success: true,
+      data: {
+        segments,
+        rawText: text,
+        wordCount: segments.filter((s) => !s.isPunctuation).length,
+        processingTimeMs: Date.now() - startTime,
+        fallback: true,
+      },
+    });
+  }
 });
 
 /**
@@ -202,16 +232,35 @@ nlpRoutes.post('/ocr', requireAuth(), zValidator('json', ocrSchema), async (c) =
 nlpRoutes.get('/dictionary/:word', async (c) => {
   const word = c.req.param('word');
 
-  // TODO: Lookup in CC-CEDICT database
-  return c.json({
-    success: true,
-    data: {
-      word,
-      pinyin: null,
-      definitions: [],
-      hskLevel: null,
-      traditional: null,
-      examples: [],
-    },
-  });
+  try {
+    const nlpClient = getNLPClient();
+    const result = await nlpClient.lookup(word);
+
+    return c.json({
+      success: true,
+      data: {
+        word: result.word,
+        pinyin: result.pinyin,
+        definitions: result.definitions,
+        hskLevel: result.hsk_level,
+        traditional: result.traditional,
+        found: result.found,
+        examples: [], // TODO: Add example sentences
+      },
+    });
+  } catch (error) {
+    console.error('Dictionary lookup error:', error);
+    return c.json({
+      success: true,
+      data: {
+        word,
+        pinyin: null,
+        definitions: [],
+        hskLevel: null,
+        traditional: null,
+        found: false,
+        examples: [],
+      },
+    });
+  }
 });
