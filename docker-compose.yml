@@ -1,0 +1,244 @@
+# Kairos Docker Compose Configuration
+# Deploy with: docker-compose up -d
+# For Enclii: enclii deploy --compose docker-compose.yml
+
+version: "3.9"
+
+services:
+  # =============================================================================
+  # Core Services
+  # =============================================================================
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - JANUA_API_URL=${JANUA_API_URL:-http://janua:4000}
+      - JANUA_PUBLISHABLE_KEY=${JANUA_PUBLISHABLE_KEY}
+      - NLP_SERVICE_URL=http://nlp:8000
+      - SIMPLIFY_SERVICE_URL=http://simplify:8001
+      - PITCH_SERVICE_URL=http://pitch:8002
+      - SPEECH_SERVICE_URL=http://speech:8003
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - CONEKTA_API_KEY=${CONEKTA_API_KEY}
+      - CONEKTA_WEBHOOK_KEY=${CONEKTA_WEBHOOK_KEY}
+      - POLAR_ACCESS_TOKEN=${POLAR_ACCESS_TOKEN}
+      - POLAR_ORGANIZATION_ID=${POLAR_ORGANIZATION_ID}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+    depends_on:
+      - postgres
+      - redis
+      - nlp
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # AI Services
+  # =============================================================================
+
+  nlp:
+    build:
+      context: ./services/nlp
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LAC_MODE=lac
+      - CEDICT_PATH=/app/data/cedict.txt
+      - HSK_PATH=/app/data/hsk.json
+    volumes:
+      - nlp-models:/app/models
+      - ./services/nlp/data:/app/data:ro
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  simplify:
+    build:
+      context: ./services/simplify
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - MODEL_ID=Qwen/Qwen3-30B-A3B
+      - GPU_MEMORY_UTILIZATION=0.90
+      - MAX_MODEL_LEN=8192
+      - HF_TOKEN=${HF_TOKEN}
+      - REDIS_URL=redis://redis:6379/1
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 300s  # Model loading takes time
+
+  pitch:
+    build:
+      context: ./services/pitch
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8002
+    volumes:
+      - pitch-models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  speech:
+    build:
+      context: ./services/speech
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8003
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - speech-models:/app/models
+      - huggingface-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 300s
+
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-kairos}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-kairos}
+      - POSTGRES_DB=${POSTGRES_DB:-kairos}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kairos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - kairos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Optional: Janua Auth (if self-hosting)
+  # =============================================================================
+
+  # janua:
+  #   image: ghcr.io/madfam-io/janua:latest
+  #   ports:
+  #     - "4000:4000"
+  #   environment:
+  #     - DATABASE_URL=postgres://kairos:kairos@postgres:5432/janua
+  #     - REDIS_URL=redis://redis:6379/2
+  #     - JWT_SECRET=${JANUA_JWT_SECRET}
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - kairos-network
+  #   restart: unless-stopped
+
+# =============================================================================
+# Networks
+# =============================================================================
+
+networks:
+  kairos-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+
+volumes:
+  postgres-data:
+  redis-data:
+  nlp-models:
+  pitch-models:
+  speech-models:
+  huggingface-cache:
