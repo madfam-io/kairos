@@ -7,3 +7,6 @@ export { useSettings, useSettingsStore, type Settings } from './useSettings';
 export { useSubscription, useSubscriptionStore, type SubscriptionTier, type Subscription, type TierLimits } from './useSubscription';
 export { usePitch, type PitchContour, type ToneAnalysis, type PitchComparison } from './usePitch';
 export { useSpeech, type TranscriptionResult, type TTSSpeaker } from './useSpeech';
+export { useReader, type SegmentedWord, type SegmentationResult, type DictionaryEntry } from './useReader';
+export { useContent, type ContentAnalysis, type ContentRecommendation, type LevelInfo, type ContentPreview } from './useContent';
+export { useAnalytics, type SummaryStats, type ProgressData, type HeatmapData, type Milestone, type EventType } from './useAnalytics';

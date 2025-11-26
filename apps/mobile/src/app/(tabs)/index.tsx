@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Play, TrendingUp, Calendar, Target, BookOpen } from 'lucide-react-native';
+import { Play, TrendingUp, Calendar, Target, BookOpen, ChevronRight, BarChart3 } from 'lucide-react-native';
 
 import { useAuth } from '~/hooks/useAuth';
 import { useSyncStatus } from '~/hooks/useSync';
@@ -53,26 +53,44 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       {/* Stats Grid */}
+      <TouchableOpacity
+        style={styles.statsHeader}
+        onPress={() => router.push('/progress')}
+        activeOpacity={0.7}
+      >
+        <View style={styles.statsHeaderLeft}>
+          <BarChart3 size={20} color="#6366f1" />
+          <Text style={styles.statsHeaderTitle}>Your Progress</Text>
+        </View>
+        <View style={styles.statsHeaderRight}>
+          <Text style={styles.viewAllText}>View All</Text>
+          <ChevronRight size={16} color="#6366f1" />
+        </View>
+      </TouchableOpacity>
       <View style={styles.statsGrid}>
         <StatCard
           icon={<Target size={24} color="#6366f1" />}
           label="Streak"
           value={`${stats.streak} days`}
+          onPress={() => router.push('/progress')}
         />
         <StatCard
           icon={<TrendingUp size={24} color="#22c55e" />}
           label="Words Known"
           value={stats.knownWords.toString()}
+          onPress={() => router.push('/progress')}
         />
         <StatCard
           icon={<Calendar size={24} color="#f59e0b" />}
           label="This Week"
           value={`${stats.weeklyCards} cards`}
+          onPress={() => router.push('/progress')}
         />
         <StatCard
           icon={<BookOpen size={24} color="#ec4899" />}
           label="Total Cards"
           value={stats.totalCards.toString()}
+          onPress={() => router.push('/progress')}
         />
       </View>
 
@@ -95,13 +113,23 @@ export default function HomeScreen() {
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function StatCard({
+  icon,
+  label,
+  value,
+  onPress,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onPress?: () => void;
+}) {
   return (
-    <View style={styles.statCard}>
+    <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
       {icon}
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -196,6 +224,32 @@ const styles = StyleSheet.create({
   reviewSubtext: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statsHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  statsHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#6366f1',
+    fontWeight: '500',
   },
   statsGrid: {
     flexDirection: 'row',

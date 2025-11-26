@@ -15,6 +15,7 @@ import { analyticsRoutes } from './routes/analytics';
 import billingRoutes from './routes/billing';
 import pitchRoutes from './routes/pitch';
 import speechRoutes from './routes/speech';
+import { contentRoutes } from './routes/content';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -68,6 +69,7 @@ api.route('/analytics', analyticsRoutes);
 api.route('/billing', billingRoutes);
 api.route('/pitch', pitchRoutes);
 api.route('/speech', speechRoutes);
+api.route('/content', contentRoutes);
 
 // Error handling
 app.onError(errorHandler);

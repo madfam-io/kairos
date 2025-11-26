@@ -67,6 +67,20 @@ export default function RootLayout() {
                 presentation: 'fullScreenModal',
               }}
             />
+            <Stack.Screen
+              name="reader"
+              options={{
+                headerShown: false,
+                presentation: 'fullScreenModal',
+              }}
+            />
+            <Stack.Screen
+              name="progress"
+              options={{
+                headerShown: false,
+                presentation: 'fullScreenModal',
+              }}
+            />
           </Stack>
         </AuthProvider>
       </ThemeProvider>

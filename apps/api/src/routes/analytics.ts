@@ -3,6 +3,12 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { AuthenticatedEnv } from '../types';
 import { requireAuth } from '../middleware/auth';
+import {
+  generateMockProgressData,
+  generateMockSummary,
+  generateMockHeatmap,
+  calculateMilestones,
+} from '../services/analytics';
 
 export const analyticsRoutes = new Hono<AuthenticatedEnv>();
 
@@ -21,6 +27,8 @@ const eventSchema = z.object({
     'pitch_practice',
     'settings_changed',
     'error_occurred',
+    'reader_opened',
+    'shadowing_completed',
   ]),
   eventData: z.record(z.unknown()).optional(),
   timestamp: z.string().datetime().optional(),
@@ -31,8 +39,8 @@ const batchEventSchema = z.object({
 });
 
 const progressQuerySchema = z.object({
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   granularity: z.enum(['day', 'week', 'month']).default('day'),
 });
 
@@ -76,15 +84,17 @@ analyticsRoutes.get('/progress', zValidator('query', progressQuerySchema), async
   const { startDate, endDate, granularity } = c.req.valid('query');
   const user = c.get('user');
 
-  // TODO: Aggregate progress data from database
+  // Calculate date range
+  const end = endDate ? new Date(endDate) : new Date();
+  const start = startDate
+    ? new Date(startDate)
+    : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000); // Default: last 30 days
+
+  const progressData = generateMockProgressData(start, end, granularity);
+
   return c.json({
     success: true,
-    data: {
-      wordsLearned: [],
-      cardsMined: [],
-      studyTime: [],
-      streakHistory: [],
-    },
+    data: progressData,
   });
 });
 
@@ -95,35 +105,11 @@ analyticsRoutes.get('/progress', zValidator('query', progressQuerySchema), async
 analyticsRoutes.get('/summary', async (c) => {
   const user = c.get('user');
 
-  // TODO: Calculate summary stats
+  const summary = generateMockSummary();
+
   return c.json({
     success: true,
-    data: {
-      today: {
-        wordsLearned: 0,
-        cardsMined: 0,
-        studyTimeMinutes: 0,
-        simplificationsUsed: 0,
-      },
-      thisWeek: {
-        wordsLearned: 0,
-        cardsMined: 0,
-        studyTimeMinutes: 0,
-        averageSessionMinutes: 0,
-      },
-      allTime: {
-        totalWordsLearned: 0,
-        totalCardsMined: 0,
-        totalStudyTimeHours: 0,
-        longestStreak: 0,
-        currentStreak: 0,
-      },
-      streakStatus: {
-        current: 0,
-        todayCompleted: false,
-        nextMilestone: 7,
-      },
-    },
+    data: summary,
   });
 });
 
@@ -134,12 +120,30 @@ analyticsRoutes.get('/summary', async (c) => {
 analyticsRoutes.get('/heatmap', async (c) => {
   const user = c.get('user');
 
-  // TODO: Generate heatmap data for past year
+  const heatmap = generateMockHeatmap(365);
+
+  return c.json({
+    success: true,
+    data: heatmap,
+  });
+});
+
+/**
+ * GET /api/v1/analytics/milestones
+ * Get achievement milestones
+ */
+analyticsRoutes.get('/milestones', async (c) => {
+  const user = c.get('user');
+
+  const summary = generateMockSummary();
+  const milestones = calculateMilestones(summary);
+
   return c.json({
     success: true,
     data: {
-      // Map of date -> activity level (0-4)
-      days: {},
+      milestones,
+      achievedCount: milestones.filter((m) => m.achieved).length,
+      totalCount: milestones.length,
     },
   });
 });
