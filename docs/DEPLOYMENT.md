@@ -27,14 +27,14 @@ This guide covers deploying Kairos to production environments.
                               │
 ┌─────────────────────────────▼───────────────────────────────────────┐
 │                      API (Bun Runtime)                               │
-│                   Cloudflare Workers / Fly.io                        │
+│                    Enclii Deployment Platform                        │
 └─────────────────────────────┬───────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
 ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-│   Supabase    │     │    Upstash    │     │     Modal     │
-│  PostgreSQL   │     │     Redis     │     │  AI Services  │
+│  PostgreSQL   │     │    Redis      │     │  AI Services  │
+│  (Enclii)     │     │   (Enclii)    │     │   (Docker)    │
 └───────────────┘     └───────────────┘     └───────────────┘
 ```
 
@@ -52,35 +52,43 @@ This guide covers deploying Kairos to production environments.
 
 | Service | Provider | Purpose |
 |---------|----------|---------|
-| API Hosting | Fly.io / Cloudflare Workers | Backend API |
-| Database | Supabase | PostgreSQL + Auth |
-| Cache | Upstash | Redis for rate limiting |
-| AI Inference | Modal | GPU serverless |
+| All Services | Enclii | Docker orchestration |
+| Database | PostgreSQL (Enclii) | Data persistence |
+| Cache | Redis (Enclii) | Rate limiting, sessions |
+| AI Inference | Docker + GPU | NLP, Simplify, Pitch, Speech |
+| Auth/Payments | Janua | Authentication + Billing |
 | CDN | Cloudflare | Static assets, DDoS |
-| Email | Resend / Postmark | Transactional email |
 
 ### Environment Variables (Production)
 
 ```bash
 # Required
 NODE_ENV=production
-DATABASE_URL=postgresql://...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgresql://postgres:password@postgres:5432/kairos
+REDIS_URL=redis://redis:6379
 
-# Billing
+# Authentication (Janua)
+JANUA_API_URL=https://auth.kairos.dev
+JANUA_PUBLISHABLE_KEY=pk_live_...
+JANUA_JWT_SECRET=your-jwt-secret
+
+# Billing (via Janua plugins)
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+CONEKTA_API_KEY=key_live_...
+CONEKTA_WEBHOOK_KEY=whkey_...
+POLAR_ACCESS_TOKEN=pat_...
+POLAR_ORGANIZATION_ID=org_...
 
-# Cache
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
+# AI Services (internal Enclii network)
+NLP_SERVICE_URL=http://nlp:8000
+SIMPLIFY_SERVICE_URL=http://simplify:8001
+PITCH_SERVICE_URL=http://pitch:8002
+SPEECH_SERVICE_URL=http://speech:8003
 
-# AI Services
-MODAL_NLP_URL=https://kairos-nlp--web-app.modal.run
-MODAL_PITCH_URL=https://kairos-pitch--web-app.modal.run
-MODAL_SIMPLIFY_URL=https://kairos-simplify--web-app.modal.run
+# AI Models
+HF_TOKEN=hf_...  # HuggingFace token for model downloads
+MODEL_ID=Qwen/Qwen3-30B-A3B  # Simplification model
 
 # Monitoring
 SENTRY_DSN=https://...
@@ -89,7 +97,31 @@ POSTHOG_KEY=phc_...
 
 ## API Deployment
 
-### Option 1: Fly.io (Recommended)
+### Option 1: Enclii (Recommended)
+
+The API is deployed as part of the Enclii stack. Configuration is in `enclii.yaml`:
+
+```bash
+# Deploy everything
+enclii deploy
+
+# Deploy only API service
+enclii deploy --service api
+
+# View logs
+enclii logs api
+
+# Scale API
+enclii scale api --replicas 3
+```
+
+The API service is defined in `enclii.yaml`:
+- **Port**: 3000
+- **Resources**: 1 CPU, 1Gi memory
+- **Health check**: `/health` endpoint
+- **Auto-scaling**: 1-5 replicas based on CPU/memory
+
+### Option 2: Fly.io
 
 **1. Install Fly CLI:**
 
@@ -201,65 +233,103 @@ docker run -d \
 
 ## AI Services Deployment
 
-All AI services are deployed to [Modal](https://modal.com).
+All AI services run as Docker containers within the Enclii platform with GPU support.
 
-### Initial Setup
+### Services Overview
 
-```bash
-# Install Modal CLI
-pip install modal
+| Service | Port | GPU | Model |
+|---------|------|-----|-------|
+| NLP | 8000 | - | PaddleNLP (Chinese NLP) |
+| Simplify | 8001 | A10G | Qwen3-30B-A3B (vLLM) |
+| Pitch | 8002 | T4 | FCPE (Pitch extraction) |
+| Speech | 8003 | A10G | SenseVoice + CosyVoice |
 
-# Authenticate
-modal token new
-```
-
-### Deploy NLP Service
-
-```bash
-cd services/nlp
-modal deploy modal_app.py
-```
-
-### Deploy Simplification Service
+### Deploy All AI Services
 
 ```bash
-cd services/simplify
-modal deploy modal_app.py
+# Deploy all services via Enclii
+enclii deploy
+
+# Or deploy individual services
+enclii deploy --service nlp
+enclii deploy --service simplify
+enclii deploy --service pitch
+enclii deploy --service speech
 ```
 
-### Deploy Pitch Service
+### Service Endpoints
 
-```bash
-cd services/pitch
-modal deploy modal_pitch.py
+Each service exposes REST endpoints:
+
+**NLP Service** (`:8000`):
+- `POST /segment` - Segment Chinese text
+- `POST /analyze` - Full linguistic analysis
+- `GET /health` - Health check
+
+**Simplify Service** (`:8001`):
+- `POST /simplify` - Simplify text to target HSK level
+- `GET /health` - Health check
+
+**Pitch Service** (`:8002`):
+- `POST /extract` - Extract pitch from audio
+- `POST /analyze-tone` - Analyze Mandarin tones
+- `POST /compare` - Compare learner vs native pitch
+- `GET /health` - Health check
+
+**Speech Service** (`:8003`):
+- `POST /asr/transcribe` - Speech-to-text
+- `POST /tts/synthesize` - Text-to-speech
+- `POST /tts/clone` - Voice cloning
+- `GET /health` - Health check
+
+### GPU Configuration
+
+GPU resources are configured in `enclii.yaml`:
+
+```yaml
+simplify:
+  resources:
+    cpu: 4
+    memory: 24Gi
+    gpu: 1
+    gpu_type: a10g  # NVIDIA A10G for large LLM
+
+pitch:
+  resources:
+    cpu: 2
+    memory: 8Gi
+    gpu: 1
+    gpu_type: t4    # NVIDIA T4 for pitch detection
+
+speech:
+  resources:
+    cpu: 4
+    memory: 16Gi
+    gpu: 1
+    gpu_type: a10g  # NVIDIA A10G for TTS
 ```
 
-### Deploy Speech Service
+### Model Caching
 
-```bash
-cd services/speech
-modal deploy modal_speech.py
-```
+Models are cached in persistent volumes to avoid re-downloading:
 
-### Modal Configuration
-
-Each service has auto-scaling configured:
-
-```python
-@app.cls(
-    image=image,
-    gpu="A10G",  # or "T4" for lighter models
-    timeout=120,
-    container_idle_timeout=180,  # Keep warm for 3 min
-    allow_concurrent_inputs=16,  # Handle concurrent requests
-)
+```yaml
+volumes:
+  huggingface-cache:
+    size: 100Gi
+    type: ssd
+  nlp-models:
+    size: 10Gi
+  speech-models:
+    size: 20Gi
 ```
 
 ### Cost Optimization
 
-- **Cold start mitigation**: Keep 1 warm instance during peak hours
+- **Persistent volumes**: Models cached to avoid re-downloading
+- **Auto-scaling**: Scale down during low traffic
 - **Caching**: Redis cache for repeated requests
-- **Batching**: Aggregate requests in 100ms windows
+- **GPU sharing**: Multiple requests per GPU where possible
 
 ## Mobile App Deployment
 
@@ -418,50 +488,64 @@ Output: `build/chrome-mv3-prod.zip` and `build/firefox-mv2-prod.zip`
 
 ## Database Setup
 
-### Supabase Setup
+### Enclii PostgreSQL
 
-1. Create project at [supabase.com](https://supabase.com)
-2. Go to Settings > Database > Connection string
-3. Copy the connection string to `DATABASE_URL`
+The database runs as a managed PostgreSQL container within Enclii.
+
+```yaml
+# From enclii.yaml
+postgres:
+  image: postgres:16-alpine
+  port: 5432
+  resources:
+    cpu: 1
+    memory: 2Gi
+  volumes:
+    - postgres-data:/var/lib/postgresql/data
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention: 7
+```
 
 ### Run Migrations
 
 ```bash
-# From local machine
-pnpm --filter @kairos/api db:push
+# Via Enclii
+enclii exec api -- bun run db:migrate
 
-# Or via Supabase CLI
-supabase db push
+# Or locally (requires network access)
+DATABASE_URL=postgresql://... bun run db:push
 ```
 
-### Enable Row Level Security
+### Database Security
 
-```sql
--- Enable RLS on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE vocabulary ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
+Authentication and authorization is handled via Janua:
 
--- Policy: Users can only access their own data
-CREATE POLICY "Users can read own vocabulary"
-  ON vocabulary FOR SELECT
-  USING (auth.uid() = user_id);
+```typescript
+// API middleware validates Janua JWT tokens
+app.use('/api/*', authMiddleware);
 
-CREATE POLICY "Users can insert own vocabulary"
-  ON vocabulary FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+// User context available in routes
+const userId = c.get('userId');
 ```
 
 ### Backups
 
-Supabase provides automatic daily backups. For additional safety:
+Enclii automatically backs up the database daily:
 
 ```bash
-# Manual backup
-pg_dump $DATABASE_URL > backup.sql
+# View backups
+enclii backups list postgres
 
-# Restore
-psql $DATABASE_URL < backup.sql
+# Manual backup
+enclii backups create postgres
+
+# Restore from backup
+enclii backups restore postgres --backup-id backup-123
+
+# Download backup
+enclii backups download postgres --backup-id backup-123 > backup.sql
 ```
 
 ## Monitoring
@@ -517,28 +601,41 @@ Configure alerts for:
 ### GitHub Actions
 
 ```yaml
-# .github/workflows/deploy-api.yml
-name: Deploy API
+# .github/workflows/deploy.yml
+name: Deploy to Enclii
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'apps/api/**'
-      - 'packages/**'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun run typecheck
+      - run: bun test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Install Enclii CLI
+        run: curl -fsSL https://get.enclii.dev | sh
 
-      - run: flyctl deploy --remote-only
-        working-directory: apps/api
+      - name: Deploy to production
+        run: enclii deploy --env production
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          ENCLII_TOKEN: ${{ secrets.ENCLII_TOKEN }}
+
+      - name: Run migrations
+        run: enclii exec api -- bun run db:migrate
+        env:
+          ENCLII_TOKEN: ${{ secrets.ENCLII_TOKEN }}
 ```
 
 ### Deployment Checklist
@@ -556,16 +653,16 @@ Before deploying to production:
 
 ### Rollback
 
-**API (Fly.io):**
+**Enclii (API & AI Services):**
 ```bash
-fly releases list
-fly deploy --image registry.fly.io/kairos-api:v123
-```
+# View deployment history
+enclii releases list
 
-**Modal:**
-```bash
-modal app history kairos-nlp
-modal app rollback kairos-nlp v1
+# Rollback to previous version
+enclii rollback api --version v1.2.3
+
+# Rollback all services
+enclii rollback --all --version v1.2.3
 ```
 
 **Mobile (EAS):**
