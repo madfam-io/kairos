@@ -59,13 +59,43 @@ This guide covers deploying Kairos to production environments.
 | Auth/Payments | Janua | Authentication + Billing |
 | CDN | Cloudflare | Static assets, DDoS |
 
+### Production Readiness Checklist
+
+Before deploying to production, ensure:
+
+**Infrastructure:**
+- [ ] PostgreSQL database provisioned
+- [ ] Redis (Upstash) configured for rate limiting
+- [ ] SSL/TLS certificates configured
+- [ ] CDN/WAF (Cloudflare) in front of API
+
+**Observability:**
+- [ ] `SENTRY_DSN` configured for error tracking
+- [ ] Prometheus scraping `/metrics` endpoint
+- [ ] Log aggregation configured (stdout → your log provider)
+- [ ] Alerting rules set up
+
+**Security:**
+- [ ] All secrets in secure vault (not in code)
+- [ ] Rate limiting enabled (uses Redis in production)
+- [ ] CORS origins restricted to your domains
+- [ ] API keys rotated from development
+
+**Database:**
+- [ ] Migrations run (`bun run db:migrate`)
+- [ ] Backups configured
+- [ ] Connection pooling enabled
+
 ### Environment Variables (Production)
 
 ```bash
 # Required
 NODE_ENV=production
 DATABASE_URL=postgresql://postgres:password@postgres:5432/kairos
-REDIS_URL=redis://redis:6379
+
+# Redis (Upstash recommended for production)
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_token
 
 # Authentication (Janua)
 JANUA_API_URL=https://auth.kairos.dev
@@ -550,18 +580,58 @@ enclii backups download postgres --backup-id backup-123 > backup.sql
 
 ## Monitoring
 
+### Observability Stack
+
+The API includes built-in observability features:
+
+| Feature | Endpoint | Purpose |
+|---------|----------|---------|
+| Health Check | `GET /health` | Basic liveness |
+| Readiness Probe | `GET /ready` | DB connectivity check |
+| Prometheus Metrics | `GET /metrics` | Metrics scraping |
+| JSON Metrics | `GET /metrics/json` | Internal dashboards |
+
+### Prometheus Integration
+
+Metrics are exposed in Prometheus format:
+
+```bash
+# Scrape metrics
+curl https://api.kairos.dev/metrics
+
+# Example output:
+# http_requests_total{method="GET",path="/api/v1/cards",status="200"} 1234
+# http_request_duration_ms_bucket{method="GET",path="/api/v1/cards",le="100"} 1000
+# http_errors_total{method="POST",path="/api/v1/auth/login",status="401"} 50
+```
+
+Configure Prometheus to scrape:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'kairos-api'
+    static_configs:
+      - targets: ['api.kairos.dev']
+    metrics_path: '/metrics'
+    scheme: 'https'
+```
+
 ### Sentry (Error Tracking)
 
-```typescript
-// apps/api/src/index.ts
-import * as Sentry from '@sentry/node';
+Sentry is automatically initialized when `SENTRY_DSN` is set:
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV,
-  tracesSampleRate: 0.1,
-});
+```bash
+# Required environment variable
+SENTRY_DSN=https://...@sentry.io/...
 ```
+
+Features:
+- Automatic error capture with stack traces
+- User context (id, email) attached to errors
+- Request ID correlation
+- Breadcrumbs for debugging
+- Sensitive data filtering (tokens, passwords)
 
 ### PostHog (Analytics)
 
