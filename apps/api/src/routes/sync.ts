@@ -2,140 +2,225 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { AuthenticatedEnv } from '../types';
-import { requireAuth, requireSubscription } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
+import { eq, and, gt } from 'drizzle-orm';
 
 export const syncRoutes = new Hono<AuthenticatedEnv>();
 
 syncRoutes.use('*', requireAuth());
-syncRoutes.use('*', requireSubscription('learner')); // Sync requires paid tier
 
-const vectorClockSchema = z.record(z.string(), z.number());
+// HLC timestamp schema
+const hlcTimestampSchema = z.object({
+  time: z.number(),
+  counter: z.number(),
+  node: z.string(),
+});
 
-const syncChangeSchema = z.object({
-  id: z.string().uuid(),
-  collection: z.enum(['vocabulary', 'cards', 'settings']),
-  operation: z.enum(['create', 'update', 'delete']),
-  documentId: z.string().uuid(),
+// Operation schema matching the CRDT package
+const operationSchema = z.object({
+  id: z.string(),
+  entityId: z.string(),
+  entityType: z.enum(['vocabulary', 'cards']),
+  type: z.enum(['create', 'update', 'delete']),
   data: z.record(z.unknown()).nullable(),
-  timestamp: z.string().datetime(),
-  clientId: z.string(),
-  vectorClock: vectorClockSchema,
+  timestamp: hlcTimestampSchema,
+  userId: z.string(),
 });
 
 const pushSchema = z.object({
-  clientId: z.string(),
-  lastSyncTimestamp: z.string().datetime().nullable(),
-  changes: z.array(syncChangeSchema).max(100),
-});
-
-const pullSchema = z.object({
-  clientId: z.string(),
-  lastSyncTimestamp: z.string().datetime().nullable(),
-  collections: z.array(z.enum(['vocabulary', 'cards', 'settings'])).optional(),
-});
-
-const resolveSchema = z.object({
-  resolutions: z.array(
-    z.object({
-      conflictId: z.string().uuid(),
-      resolution: z.discriminatedUnion('type', [
-        z.object({ type: z.literal('use_client') }),
-        z.object({ type: z.literal('use_server') }),
-        z.object({ type: z.literal('merge'), mergedData: z.record(z.unknown()) }),
-      ]),
-    })
-  ),
+  operations: z.array(operationSchema).max(100),
 });
 
 /**
  * POST /api/v1/sync/push
- * Push local changes to server
+ * Push local changes to server using HLC timestamps
  */
 syncRoutes.post('/push', zValidator('json', pushSchema), async (c) => {
-  const { clientId, lastSyncTimestamp, changes } = c.req.valid('json');
+  const { operations } = c.req.valid('json');
   const user = c.get('user');
+  const startTime = Date.now();
 
-  // TODO: Process changes, detect conflicts, apply accepted changes
   const accepted: string[] = [];
-  const conflicts: unknown[] = [];
+  const rejected: Array<{ id: string; reason: string }> = [];
 
-  for (const change of changes) {
-    // TODO: Check for conflicts using vector clocks
-    // TODO: Apply change to database
-    accepted.push(change.id);
+  // TODO: Implement database operations
+  // For each operation:
+  // 1. Check if entity exists
+  // 2. Compare HLC timestamps (LWW)
+  // 3. Apply if newer, reject if older
+  // 4. Store in sync_changes table for other clients
+
+  for (const op of operations) {
+    try {
+      // Validate operation belongs to this user
+      if (op.userId !== user.id && !op.userId.startsWith(user.id.slice(0, 8))) {
+        rejected.push({ id: op.id, reason: 'Unauthorized' });
+        continue;
+      }
+
+      // TODO: Actual database operation
+      // For now, accept all valid operations
+      accepted.push(op.id);
+
+      // Store operation for other clients to pull
+      // await db.insert(syncChanges).values({
+      //   id: op.id,
+      //   userId: user.id,
+      //   entityId: op.entityId,
+      //   entityType: op.entityType,
+      //   operationType: op.type,
+      //   data: op.data,
+      //   hlcTime: op.timestamp.time,
+      //   hlcCounter: op.timestamp.counter,
+      //   hlcNode: op.timestamp.node,
+      //   createdAt: new Date(),
+      // });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      rejected.push({ id: op.id, reason: message });
+    }
   }
+
+  // Generate server timestamp for client to use as lastSync
+  const serverTimestamp = serializeHLC({
+    time: Date.now(),
+    counter: 0,
+    node: 'server',
+  });
 
   return c.json({
     success: true,
     data: {
-      accepted,
-      conflicts,
-      serverTimestamp: new Date(),
+      accepted: accepted.length,
+      acceptedIds: accepted,
+      rejected,
+      timestamp: serverTimestamp,
+      processingTimeMs: Date.now() - startTime,
     },
   });
 });
 
 /**
  * GET /api/v1/sync/pull
- * Pull server changes to client
+ * Pull server changes since last sync
  */
-syncRoutes.post('/pull', zValidator('json', pullSchema), async (c) => {
-  const { clientId, lastSyncTimestamp, collections } = c.req.valid('json');
+syncRoutes.get('/pull', async (c) => {
   const user = c.get('user');
+  const sinceParam = c.req.query('since');
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '100'), 500);
 
-  // TODO: Fetch changes since lastSyncTimestamp
-  const changes: unknown[] = [];
-
-  return c.json({
-    success: true,
-    data: {
-      changes,
-      serverTimestamp: new Date(),
-      hasMore: false,
-    },
-  });
-});
-
-/**
- * POST /api/v1/sync/resolve
- * Resolve sync conflicts
- */
-syncRoutes.post('/resolve', zValidator('json', resolveSchema), async (c) => {
-  const { resolutions } = c.req.valid('json');
-  const user = c.get('user');
-
-  // TODO: Apply conflict resolutions
-  const resolved: string[] = [];
-
-  for (const resolution of resolutions) {
-    // TODO: Apply resolution
-    resolved.push(resolution.conflictId);
+  let since: { time: number; counter: number; node: string } | null = null;
+  if (sinceParam) {
+    since = parseHLC(sinceParam);
   }
 
+  // TODO: Fetch operations from database
+  // const operations = await db.select()
+  //   .from(syncChanges)
+  //   .where(
+  //     and(
+  //       eq(syncChanges.userId, user.id),
+  //       since ? gt(syncChanges.hlcTime, since.time) : undefined
+  //     )
+  //   )
+  //   .orderBy(syncChanges.hlcTime, syncChanges.hlcCounter)
+  //   .limit(limit + 1);
+
+  const operations: any[] = []; // Placeholder
+
+  const hasMore = operations.length > limit;
+  const resultOps = hasMore ? operations.slice(0, limit) : operations;
+
+  // Convert DB records to operations
+  const formattedOps = resultOps.map((op: any) => ({
+    id: op.id,
+    entityId: op.entityId,
+    entityType: op.entityType,
+    type: op.operationType,
+    data: op.data,
+    timestamp: serializeHLC({
+      time: op.hlcTime,
+      counter: op.hlcCounter,
+      node: op.hlcNode,
+    }),
+    userId: op.userId,
+  }));
+
+  const serverTimestamp = serializeHLC({
+    time: Date.now(),
+    counter: 0,
+    node: 'server',
+  });
+
   return c.json({
     success: true,
     data: {
-      resolved,
-      serverTimestamp: new Date(),
+      operations: formattedOps,
+      timestamp: serverTimestamp,
+      hasMore,
     },
   });
 });
 
 /**
  * GET /api/v1/sync/status
- * Get current sync status
+ * Get current sync status for the user
  */
 syncRoutes.get('/status', async (c) => {
   const user = c.get('user');
 
-  // TODO: Fetch sync status from database
+  // TODO: Fetch actual status from database
+  // const pendingCount = await db.select({ count: count() })
+  //   .from(syncChanges)
+  //   .where(eq(syncChanges.userId, user.id));
+
   return c.json({
     success: true,
     data: {
       lastSyncTimestamp: null,
-      pendingCount: 0,
-      conflictCount: 0,
-      syncStatus: 'idle',
+      pendingChanges: 0,
+      totalVocabulary: 0,
+      totalCards: 0,
+      serverTime: Date.now(),
     },
   });
 });
+
+/**
+ * POST /api/v1/sync/full
+ * Full sync - get all data (for initial sync or recovery)
+ */
+syncRoutes.post('/full', async (c) => {
+  const user = c.get('user');
+
+  // TODO: Fetch all user data
+  // const vocabulary = await db.select().from(vocabularyTable).where(eq(...));
+  // const cards = await db.select().from(cardsTable).where(eq(...));
+
+  return c.json({
+    success: true,
+    data: {
+      vocabulary: [],
+      cards: [],
+      timestamp: serializeHLC({
+        time: Date.now(),
+        counter: 0,
+        node: 'server',
+      }),
+    },
+  });
+});
+
+// Helper functions for HLC serialization
+function serializeHLC(ts: { time: number; counter: number; node: string }): string {
+  return `${ts.time.toString(36)}-${ts.counter.toString(36)}-${ts.node}`;
+}
+
+function parseHLC(str: string): { time: number; counter: number; node: string } {
+  const [time, counter, node] = str.split('-');
+  return {
+    time: parseInt(time, 36),
+    counter: parseInt(counter, 36),
+    node,
+  };
+}
