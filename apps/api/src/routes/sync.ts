@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
+import { eq, and, gt, count, desc, asc } from 'drizzle-orm';
 import type { AuthenticatedEnv } from '../types';
 import { requireAuth } from '../middleware/auth';
-import { eq, and, gt } from 'drizzle-orm';
+import { db } from '../db';
+import { syncChanges, vocabulary, cards } from '../db/schema';
+import { log } from '../lib/logger';
 
 export const syncRoutes = new Hono<AuthenticatedEnv>();
 
@@ -24,68 +27,79 @@ const operationSchema = z.object({
   type: z.enum(['create', 'update', 'delete']),
   data: z.record(z.unknown()).nullable(),
   timestamp: hlcTimestampSchema,
-  userId: z.string(),
+  clientId: z.string().optional(),
 });
 
 const pushSchema = z.object({
   operations: z.array(operationSchema).max(100),
+  clientId: z.string(),
 });
 
 /**
  * POST /api/v1/sync/push
- * Push local changes to server using HLC timestamps
+ * Push local changes to server using HLC timestamps (Last-Write-Wins)
  */
 syncRoutes.post('/push', zValidator('json', pushSchema), async (c) => {
-  const { operations } = c.req.valid('json');
+  const { operations, clientId } = c.req.valid('json');
   const user = c.get('user');
   const startTime = Date.now();
 
   const accepted: string[] = [];
   const rejected: Array<{ id: string; reason: string }> = [];
 
-  // TODO: Implement database operations
-  // For each operation:
-  // 1. Check if entity exists
-  // 2. Compare HLC timestamps (LWW)
-  // 3. Apply if newer, reject if older
-  // 4. Store in sync_changes table for other clients
+  // Process operations in a transaction
+  await db.transaction(async (tx) => {
+    for (const op of operations) {
+      try {
+        // Create vector clock from HLC timestamp
+        const vectorClock = {
+          [op.timestamp.node]: {
+            time: op.timestamp.time,
+            counter: op.timestamp.counter,
+          },
+        };
 
-  for (const op of operations) {
-    try {
-      // Validate operation belongs to this user
-      if (op.userId !== user.id && !op.userId.startsWith(user.id.slice(0, 8))) {
-        rejected.push({ id: op.id, reason: 'Unauthorized' });
-        continue;
+        // Store the sync change for other clients to pull
+        await tx.insert(syncChanges).values({
+          userId: user.id,
+          clientId: op.clientId || clientId,
+          collection: op.entityType,
+          operation: op.type,
+          documentId: op.entityId,
+          data: op.data,
+          vectorClock,
+          appliedAt: new Date(),
+        });
+
+        // Apply the operation to the actual data tables
+        if (op.entityType === 'vocabulary') {
+          await applyVocabularyOperation(tx, user.id, op);
+        } else if (op.entityType === 'cards') {
+          await applyCardsOperation(tx, user.id, op);
+        }
+
+        accepted.push(op.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        log.error('Sync operation failed', error as Error, { opId: op.id });
+        rejected.push({ id: op.id, reason: message });
       }
-
-      // TODO: Actual database operation
-      // For now, accept all valid operations
-      accepted.push(op.id);
-
-      // Store operation for other clients to pull
-      // await db.insert(syncChanges).values({
-      //   id: op.id,
-      //   userId: user.id,
-      //   entityId: op.entityId,
-      //   entityType: op.entityType,
-      //   operationType: op.type,
-      //   data: op.data,
-      //   hlcTime: op.timestamp.time,
-      //   hlcCounter: op.timestamp.counter,
-      //   hlcNode: op.timestamp.node,
-      //   createdAt: new Date(),
-      // });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      rejected.push({ id: op.id, reason: message });
     }
-  }
+  });
 
   // Generate server timestamp for client to use as lastSync
   const serverTimestamp = serializeHLC({
     time: Date.now(),
     counter: 0,
     node: 'server',
+  });
+
+  log.info('Sync push completed', {
+    userId: user.id,
+    clientId,
+    accepted: accepted.length,
+    rejected: rejected.length,
+    processingTimeMs: Date.now() - startTime,
   });
 
   return c.json({
@@ -101,50 +115,153 @@ syncRoutes.post('/push', zValidator('json', pushSchema), async (c) => {
 });
 
 /**
+ * Apply vocabulary operation to the database
+ */
+async function applyVocabularyOperation(
+  tx: typeof db,
+  userId: string,
+  op: z.infer<typeof operationSchema>
+) {
+  if (op.type === 'create' || op.type === 'update') {
+    const data = op.data as Record<string, unknown>;
+    await tx
+      .insert(vocabulary)
+      .values({
+        id: op.entityId,
+        userId,
+        word: data.word as string,
+        pinyin: data.pinyin as string | undefined,
+        definition: data.definition as string | undefined,
+        hskLevel: data.hskLevel as number | undefined,
+        status: (data.status as string) || 'new',
+        easeFactor: (data.easeFactor as number) || 2.5,
+        nextReview: data.nextReview ? new Date(data.nextReview as string) : undefined,
+        reviewCount: (data.reviewCount as number) || 0,
+      })
+      .onConflictDoUpdate({
+        target: vocabulary.id,
+        set: {
+          word: data.word as string,
+          pinyin: data.pinyin as string | undefined,
+          definition: data.definition as string | undefined,
+          hskLevel: data.hskLevel as number | undefined,
+          status: data.status as string | undefined,
+          easeFactor: data.easeFactor as number | undefined,
+          nextReview: data.nextReview ? new Date(data.nextReview as string) : undefined,
+          reviewCount: data.reviewCount as number | undefined,
+          updatedAt: new Date(),
+        },
+      });
+  } else if (op.type === 'delete') {
+    await tx.delete(vocabulary).where(
+      and(eq(vocabulary.id, op.entityId), eq(vocabulary.userId, userId))
+    );
+  }
+}
+
+/**
+ * Apply cards operation to the database
+ */
+async function applyCardsOperation(
+  tx: typeof db,
+  userId: string,
+  op: z.infer<typeof operationSchema>
+) {
+  if (op.type === 'create' || op.type === 'update') {
+    const data = op.data as Record<string, unknown>;
+    await tx
+      .insert(cards)
+      .values({
+        id: op.entityId,
+        userId,
+        word: data.word as string,
+        sentence: data.sentence as string | undefined,
+        simplifiedSentence: data.simplifiedSentence as string | undefined,
+        audioUrl: data.audioUrl as string | undefined,
+        imageUrl: data.imageUrl as string | undefined,
+        sourceUrl: data.sourceUrl as string | undefined,
+        sourceTitle: data.sourceTitle as string | undefined,
+        status: (data.status as string) || 'mined',
+      })
+      .onConflictDoUpdate({
+        target: cards.id,
+        set: {
+          word: data.word as string,
+          sentence: data.sentence as string | undefined,
+          simplifiedSentence: data.simplifiedSentence as string | undefined,
+          audioUrl: data.audioUrl as string | undefined,
+          imageUrl: data.imageUrl as string | undefined,
+          sourceUrl: data.sourceUrl as string | undefined,
+          sourceTitle: data.sourceTitle as string | undefined,
+          status: data.status as string | undefined,
+          updatedAt: new Date(),
+        },
+      });
+  } else if (op.type === 'delete') {
+    await tx.delete(cards).where(
+      and(eq(cards.id, op.entityId), eq(cards.userId, userId))
+    );
+  }
+}
+
+/**
  * GET /api/v1/sync/pull
  * Pull server changes since last sync
  */
 syncRoutes.get('/pull', async (c) => {
   const user = c.get('user');
   const sinceParam = c.req.query('since');
+  const clientId = c.req.query('clientId');
   const limit = Math.min(parseInt(c.req.query('limit') ?? '100'), 500);
 
-  let since: { time: number; counter: number; node: string } | null = null;
+  let sinceTime: Date | null = null;
   if (sinceParam) {
-    since = parseHLC(sinceParam);
+    const hlc = parseHLC(sinceParam);
+    sinceTime = new Date(hlc.time);
   }
 
-  // TODO: Fetch operations from database
-  // const operations = await db.select()
-  //   .from(syncChanges)
-  //   .where(
-  //     and(
-  //       eq(syncChanges.userId, user.id),
-  //       since ? gt(syncChanges.hlcTime, since.time) : undefined
-  //     )
-  //   )
-  //   .orderBy(syncChanges.hlcTime, syncChanges.hlcCounter)
-  //   .limit(limit + 1);
+  // Build query conditions
+  const conditions = [eq(syncChanges.userId, user.id)];
 
-  const operations: any[] = []; // Placeholder
+  // Exclude changes from the requesting client (they already have them)
+  // and only get changes since the last sync
+  if (sinceTime) {
+    conditions.push(gt(syncChanges.createdAt, sinceTime));
+  }
 
-  const hasMore = operations.length > limit;
-  const resultOps = hasMore ? operations.slice(0, limit) : operations;
+  // Fetch changes
+  const changes = await db
+    .select()
+    .from(syncChanges)
+    .where(and(...conditions))
+    .orderBy(asc(syncChanges.createdAt))
+    .limit(limit + 1);
 
-  // Convert DB records to operations
-  const formattedOps = resultOps.map((op: any) => ({
-    id: op.id,
-    entityId: op.entityId,
-    entityType: op.entityType,
-    type: op.operationType,
-    data: op.data,
-    timestamp: serializeHLC({
-      time: op.hlcTime,
-      counter: op.hlcCounter,
-      node: op.hlcNode,
-    }),
-    userId: op.userId,
-  }));
+  const hasMore = changes.length > limit;
+  const resultChanges = hasMore ? changes.slice(0, limit) : changes;
+
+  // Convert DB records to operations format
+  const operations = resultChanges
+    .filter(change => change.clientId !== clientId) // Exclude own changes
+    .map((change) => {
+      const vectorClock = change.vectorClock as Record<string, { time: number; counter: number }>;
+      const firstNode = Object.keys(vectorClock)[0] || 'server';
+      const clockData = vectorClock[firstNode] || { time: Date.now(), counter: 0 };
+
+      return {
+        id: change.id,
+        entityId: change.documentId,
+        entityType: change.collection,
+        type: change.operation,
+        data: change.data,
+        timestamp: serializeHLC({
+          time: clockData.time,
+          counter: clockData.counter,
+          node: firstNode,
+        }),
+        clientId: change.clientId,
+      };
+    });
 
   const serverTimestamp = serializeHLC({
     time: Date.now(),
@@ -155,7 +272,7 @@ syncRoutes.get('/pull', async (c) => {
   return c.json({
     success: true,
     data: {
-      operations: formattedOps,
+      operations,
       timestamp: serverTimestamp,
       hasMore,
     },
@@ -169,18 +286,44 @@ syncRoutes.get('/pull', async (c) => {
 syncRoutes.get('/status', async (c) => {
   const user = c.get('user');
 
-  // TODO: Fetch actual status from database
-  // const pendingCount = await db.select({ count: count() })
-  //   .from(syncChanges)
-  //   .where(eq(syncChanges.userId, user.id));
+  // Get counts in parallel
+  const [
+    [{ pendingChanges }],
+    [{ totalVocabulary }],
+    [{ totalCards }],
+    lastSync,
+  ] = await Promise.all([
+    db.select({ pendingChanges: count() })
+      .from(syncChanges)
+      .where(eq(syncChanges.userId, user.id)),
+    db.select({ totalVocabulary: count() })
+      .from(vocabulary)
+      .where(eq(vocabulary.userId, user.id)),
+    db.select({ totalCards: count() })
+      .from(cards)
+      .where(eq(cards.userId, user.id)),
+    db.select({ createdAt: syncChanges.createdAt })
+      .from(syncChanges)
+      .where(eq(syncChanges.userId, user.id))
+      .orderBy(desc(syncChanges.createdAt))
+      .limit(1),
+  ]);
+
+  const lastSyncTimestamp = lastSync[0]
+    ? serializeHLC({
+        time: lastSync[0].createdAt.getTime(),
+        counter: 0,
+        node: 'server',
+      })
+    : null;
 
   return c.json({
     success: true,
     data: {
-      lastSyncTimestamp: null,
-      pendingChanges: 0,
-      totalVocabulary: 0,
-      totalCards: 0,
+      lastSyncTimestamp,
+      pendingChanges,
+      totalVocabulary,
+      totalCards,
       serverTime: Date.now(),
     },
   });
@@ -193,21 +336,51 @@ syncRoutes.get('/status', async (c) => {
 syncRoutes.post('/full', async (c) => {
   const user = c.get('user');
 
-  // TODO: Fetch all user data
-  // const vocabulary = await db.select().from(vocabularyTable).where(eq(...));
-  // const cards = await db.select().from(cardsTable).where(eq(...));
+  // Fetch all user data in parallel
+  const [userVocabulary, userCards] = await Promise.all([
+    db.select().from(vocabulary).where(eq(vocabulary.userId, user.id)),
+    db.select().from(cards).where(eq(cards.userId, user.id)),
+  ]);
+
+  const serverTimestamp = serializeHLC({
+    time: Date.now(),
+    counter: 0,
+    node: 'server',
+  });
+
+  log.info('Full sync requested', {
+    userId: user.id,
+    vocabularyCount: userVocabulary.length,
+    cardsCount: userCards.length,
+  });
 
   return c.json({
     success: true,
     data: {
-      vocabulary: [],
-      cards: [],
-      timestamp: serializeHLC({
-        time: Date.now(),
-        counter: 0,
-        node: 'server',
-      }),
+      vocabulary: userVocabulary,
+      cards: userCards,
+      timestamp: serverTimestamp,
     },
+  });
+});
+
+/**
+ * DELETE /api/v1/sync/history
+ * Clear sync history (useful for debugging/testing)
+ */
+syncRoutes.delete('/history', async (c) => {
+  const user = c.get('user');
+
+  const result = await db
+    .delete(syncChanges)
+    .where(eq(syncChanges.userId, user.id))
+    .returning({ id: syncChanges.id });
+
+  log.info('Sync history cleared', { userId: user.id, deleted: result.length });
+
+  return c.json({
+    success: true,
+    data: { deleted: result.length },
   });
 });
 

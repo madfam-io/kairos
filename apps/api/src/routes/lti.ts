@@ -5,8 +5,20 @@ import { ltiPlatforms, ltiLaunches, users, organizationMembers } from '../db/sch
 import { requireAuth } from '../middleware/auth';
 import { requireOrgRole } from '../middleware/organization';
 import type { AppEnv } from '../types';
+import { AppError } from '../middleware/error-handler';
+import { log } from '../lib/logger';
+import {
+  initializeLTIKeys,
+  getJWKS,
+  verifyPlatformJWT,
+  signLTIJWT,
+} from '../services/lti-keys';
+import { getEnv } from '../lib/env';
 
 export const ltiRoutes = new Hono<AppEnv>();
+
+// Initialize LTI keys on first request
+let keysInitialized = false;
 
 // =============================================================================
 // LTI 1.3 CONFIGURATION ENDPOINTS
@@ -63,24 +75,21 @@ ltiRoutes.get('/config', (c) => {
 
 /**
  * JWKS endpoint for LTI platform to verify our signatures
- * In production, this should serve actual RSA public keys
+ * Serves actual RSA public keys for JWT signature verification
  */
 ltiRoutes.get('/jwks', async (c) => {
-  // In production, generate and serve real RSA keys
-  // For now, return a placeholder that indicates keys need configuration
-  return c.json({
-    keys: [
-      {
-        kty: 'RSA',
-        alg: 'RS256',
-        use: 'sig',
-        kid: 'kairos-lti-key-1',
-        // In production: n, e values from actual RSA public key
-        n: 'REPLACE_WITH_ACTUAL_PUBLIC_KEY_MODULUS',
-        e: 'AQAB',
-      },
-    ],
-  });
+  // Ensure keys are initialized
+  if (!keysInitialized) {
+    await initializeLTIKeys();
+    keysInitialized = true;
+  }
+
+  const jwks = getJWKS();
+
+  // Set cache headers - keys don't change frequently
+  c.header('Cache-Control', 'public, max-age=3600');
+
+  return c.json(jwks);
 });
 
 // =============================================================================
@@ -400,25 +409,52 @@ ltiRoutes.post('/launch', async (c) => {
     }, 400);
   }
 
-  // In production: Verify JWT signature using platform's public key
-  // For now, decode the JWT payload (base64)
-  const [, payloadBase64] = idToken.split('.');
-  let payload: any;
-
-  try {
-    payload = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf-8'));
-  } catch {
+  // Check if launch is not expired (10 minute window)
+  const launchAge = Date.now() - new Date(launch.createdAt).getTime();
+  if (launchAge > 10 * 60 * 1000) {
+    log.warn('LTI launch expired', { launchId: launch.id, ageMs: launchAge });
     return c.json({
       success: false,
-      error: 'Invalid id_token format',
+      error: 'Launch session expired, please try again',
     }, 400);
   }
 
-  // Verify nonce
-  if (payload.nonce !== launch.nonce) {
+  // SECURITY: Verify JWT signature using platform's public key
+  let payload: any;
+  const env = getEnv();
+  const baseUrl = env.API_BASE_URL || 'https://api.kairos.dev';
+
+  try {
+    // Verify JWT using platform's JWKS or public key
+    const verifyResult = await verifyPlatformJWT(idToken, {
+      jwksUrl: launch.platform.keySetUrl,
+      publicKey: launch.platform.publicKey || undefined,
+      expectedIssuer: launch.platform.issuer,
+      expectedAudience: launch.platform.clientId,
+    });
+
+    payload = verifyResult.payload;
+    log.info('LTI JWT verified successfully', { platformId: launch.platformId });
+  } catch (error) {
+    log.error('LTI JWT verification failed', error as Error, {
+      platformId: launch.platformId,
+      issuer: launch.platform.issuer,
+    });
     return c.json({
       success: false,
-      error: 'Invalid nonce',
+      error: 'Invalid or untrusted id_token',
+    }, 401);
+  }
+
+  // Verify nonce to prevent replay attacks
+  if (payload.nonce !== launch.nonce) {
+    log.warn('LTI nonce mismatch', {
+      expected: launch.nonce,
+      received: payload.nonce
+    });
+    return c.json({
+      success: false,
+      error: 'Invalid nonce - possible replay attack',
     }, 400);
   }
 

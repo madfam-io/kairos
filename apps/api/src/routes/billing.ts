@@ -158,9 +158,22 @@ const cancelSchema = z.object({
 });
 
 billing.post('/cancel', zValidator('json', cancelSchema), async (c) => {
+  const user = c.get('user');
+  const organizationId = user.id;
   const body = c.req.valid('json');
 
   try {
+    // SECURITY: Verify user owns this subscription before canceling
+    const userSubscription = await getSubscription(organizationId, body.provider);
+    if (!userSubscription) {
+      return c.json({ error: 'No active subscription found' }, 404);
+    }
+
+    // Check if the subscription ID matches the user's subscription
+    if (userSubscription.id !== body.subscriptionId) {
+      return c.json({ error: 'Unauthorized - subscription does not belong to you' }, 403);
+    }
+
     const subscription = await cancelSubscription(
       body.subscriptionId,
       body.provider,
@@ -180,9 +193,22 @@ const resumeSchema = z.object({
 });
 
 billing.post('/resume', zValidator('json', resumeSchema), async (c) => {
+  const user = c.get('user');
+  const organizationId = user.id;
   const body = c.req.valid('json');
 
   try {
+    // SECURITY: Verify user owns this subscription before resuming
+    const userSubscription = await getSubscription(organizationId, body.provider);
+    if (!userSubscription) {
+      return c.json({ error: 'No subscription found' }, 404);
+    }
+
+    // Check if the subscription ID matches the user's subscription
+    if (userSubscription.id !== body.subscriptionId) {
+      return c.json({ error: 'Unauthorized - subscription does not belong to you' }, 403);
+    }
+
     const subscription = await resumeSubscription(body.subscriptionId, body.provider);
     return c.json({ subscription });
   } catch (error) {
