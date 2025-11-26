@@ -1,10 +1,52 @@
 import type { MiddlewareHandler } from 'hono';
-import { createClient } from '@supabase/supabase-js';
 import type { AppEnv, AuthenticatedEnv } from '../types';
 import { AppError } from './error-handler';
+import { getJanuaClient, AuthError, type JanuaUser } from '../services/janua';
 
 /**
- * Authentication middleware - validates JWT and loads user
+ * Map Janua user to Kairos user format
+ */
+function mapJanuaUser(januaUser: JanuaUser, subscriptionData?: SubscriptionData) {
+  // Determine subscription tier from Janua roles or metadata
+  let subscriptionTier: 'free' | 'learner' | 'immersion' = 'free';
+  let subscriptionExpiresAt: Date | null = null;
+
+  if (januaUser.roles.includes('immersion') || januaUser.roles.includes('subscriber:immersion')) {
+    subscriptionTier = 'immersion';
+  } else if (januaUser.roles.includes('learner') || januaUser.roles.includes('subscriber:learner')) {
+    subscriptionTier = 'learner';
+  }
+
+  // Check metadata for subscription expiry
+  if (januaUser.metadata?.subscriptionExpiresAt) {
+    subscriptionExpiresAt = new Date(januaUser.metadata.subscriptionExpiresAt as string);
+  }
+
+  // Override with provided subscription data if available
+  if (subscriptionData) {
+    subscriptionTier = subscriptionData.tier;
+    subscriptionExpiresAt = subscriptionData.expiresAt;
+  }
+
+  return {
+    id: januaUser.id,
+    email: januaUser.email,
+    name: januaUser.name,
+    avatarUrl: januaUser.avatarUrl,
+    createdAt: new Date(januaUser.createdAt),
+    subscriptionTier,
+    subscriptionExpiresAt,
+    settings: (januaUser.metadata?.settings as Record<string, unknown>) ?? {},
+  };
+}
+
+interface SubscriptionData {
+  tier: 'free' | 'learner' | 'immersion';
+  expiresAt: Date | null;
+}
+
+/**
+ * Authentication middleware - validates Janua JWT and loads user
  */
 export function requireAuth(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
@@ -17,47 +59,27 @@ export function requireAuth(): MiddlewareHandler<AppEnv> {
     const token = authHeader.slice(7);
 
     try {
-      const supabase = createClient(
-        c.env.SUPABASE_URL,
-        c.env.SUPABASE_ANON_KEY,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        }
-      );
+      const janua = getJanuaClient();
 
-      const { data, error } = await supabase.auth.getUser(token);
+      // Verify the JWT token
+      const payload = await janua.verifyToken(token);
 
-      if (error || !data.user) {
-        throw AppError.unauthorized('Invalid or expired token');
-      }
+      // Convert token payload to user object
+      const januaUser = janua.tokenToUser(payload);
 
-      // Load full user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
+      // TODO: Optionally fetch subscription data from local database
+      // const subscriptionData = await fetchSubscriptionFromDB(januaUser.id);
 
-      if (profileError || !profile) {
-        throw AppError.unauthorized('User profile not found');
-      }
-
-      c.set('user', {
-        id: profile.id,
-        email: profile.email,
-        createdAt: new Date(profile.created_at),
-        subscriptionTier: profile.subscription_tier,
-        subscriptionExpiresAt: profile.subscription_expires_at
-          ? new Date(profile.subscription_expires_at)
-          : null,
-        settings: profile.settings,
-      });
+      c.set('user', mapJanuaUser(januaUser));
 
       await next();
     } catch (err) {
+      if (err instanceof AuthError) {
+        if (err.code === 'TOKEN_EXPIRED') {
+          throw AppError.unauthorized('Token has expired');
+        }
+        throw AppError.unauthorized(err.message);
+      }
       if (err instanceof AppError) throw err;
       throw AppError.unauthorized('Authentication failed');
     }
@@ -80,44 +102,13 @@ export function optionalAuth(): MiddlewareHandler<AppEnv> {
     const token = authHeader.slice(7);
 
     try {
-      const supabase = createClient(
-        c.env.SUPABASE_URL,
-        c.env.SUPABASE_ANON_KEY,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        }
-      );
+      const janua = getJanuaClient();
+      const payload = await janua.verifyToken(token);
+      const januaUser = janua.tokenToUser(payload);
 
-      const { data, error } = await supabase.auth.getUser(token);
-
-      if (!error && data.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile) {
-          c.set('user', {
-            id: profile.id,
-            email: profile.email,
-            createdAt: new Date(profile.created_at),
-            subscriptionTier: profile.subscription_tier,
-            subscriptionExpiresAt: profile.subscription_expires_at
-              ? new Date(profile.subscription_expires_at)
-              : null,
-            settings: profile.settings,
-          });
-        }
-      }
+      c.set('user', mapJanuaUser(januaUser));
     } catch {
       // Ignore auth errors for optional auth
-    }
-
-    if (!c.get('user')) {
       c.set('user', null);
     }
 
@@ -166,4 +157,40 @@ export function requireSubscription(
 
     await next();
   };
+}
+
+/**
+ * Role-based access control middleware
+ */
+export function requireRole(role: string): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+
+    if (!authHeader?.startsWith('Bearer ')) {
+      throw AppError.unauthorized('Missing authorization header');
+    }
+
+    const token = authHeader.slice(7);
+
+    try {
+      const janua = getJanuaClient();
+      const payload = await janua.verifyToken(token);
+
+      if (!payload.roles?.includes(role)) {
+        throw new AppError('FORBIDDEN', `Role '${role}' required`, 403);
+      }
+
+      await next();
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw AppError.unauthorized('Authentication failed');
+    }
+  };
+}
+
+/**
+ * Admin-only middleware
+ */
+export function requireAdmin(): MiddlewareHandler<AppEnv> {
+  return requireRole('admin');
 }

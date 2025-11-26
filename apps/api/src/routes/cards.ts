@@ -3,6 +3,13 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { AuthenticatedEnv } from '../types';
 import { requireAuth } from '../middleware/auth';
+import {
+  getAnkiClient,
+  cardsToAnkiNotes,
+  cardsToCSV,
+  cardsToAnkiText,
+} from '../services/anki';
+import type { Card } from '@kairos/types';
 
 export const cardsRoutes = new Hono<AuthenticatedEnv>();
 
@@ -116,16 +123,175 @@ cardsRoutes.post('/export', zValidator('json', exportSchema), async (c) => {
   const options = c.req.valid('json');
   const user = c.get('user');
 
-  // TODO: Generate export file
-  return c.json({
-    success: true,
-    data: {
-      deckName: 'Kairos Export',
-      cardCount: 0,
-      downloadUrl: null,
-      format: options.format,
-    },
-  });
+  // TODO: Fetch cards from database based on cardIds or all user cards
+  const cards: Card[] = []; // Placeholder - fetch from DB
+
+  if (cards.length === 0) {
+    return c.json({
+      success: false,
+      error: { message: 'No cards to export' },
+    }, 400);
+  }
+
+  switch (options.format) {
+    case 'csv': {
+      const csv = cardsToCSV(cards);
+      return new Response(csv, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': 'attachment; filename="kairos-cards.csv"',
+        },
+      });
+    }
+
+    case 'json': {
+      return c.json({
+        success: true,
+        data: {
+          cards,
+          exportedAt: new Date().toISOString(),
+          format: 'json',
+        },
+      });
+    }
+
+    case 'anki':
+    default: {
+      const ankiText = cardsToAnkiText(cards);
+      return new Response(ankiText, {
+        headers: {
+          'Content-Type': 'text/plain',
+          'Content-Disposition': 'attachment; filename="kairos-cards.txt"',
+        },
+      });
+    }
+  }
+});
+
+const ankiConnectSchema = z.object({
+  deckName: z.string().default('Kairos'),
+  cardIds: z.array(z.string().uuid()).optional(),
+});
+
+/**
+ * POST /api/v1/cards/anki-connect
+ * Export cards directly to Anki via AnkiConnect
+ */
+cardsRoutes.post('/anki-connect', zValidator('json', ankiConnectSchema), async (c) => {
+  const { deckName, cardIds } = c.req.valid('json');
+  const user = c.get('user');
+
+  const ankiClient = getAnkiClient();
+
+  // Check if AnkiConnect is available
+  const isAvailable = await ankiClient.ping();
+  if (!isAvailable) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'ANKI_CONNECT_UNAVAILABLE',
+        message: 'AnkiConnect is not running. Please open Anki and ensure AnkiConnect add-on is installed.',
+      },
+    }, 503);
+  }
+
+  try {
+    // Ensure deck and model exist
+    await ankiClient.createDeck(deckName);
+    await ankiClient.ensureKairosModel();
+
+    // TODO: Fetch cards from database
+    const cards: Card[] = []; // Placeholder - fetch from DB
+
+    if (cards.length === 0) {
+      return c.json({
+        success: false,
+        error: { message: 'No cards to export' },
+      }, 400);
+    }
+
+    // Convert to Anki notes
+    const notes = cardsToAnkiNotes(cards, deckName);
+
+    // Check which notes can be added (avoid duplicates)
+    const canAdd = await ankiClient.canAddNotes(notes);
+    const notesToAdd = notes.filter((_, i) => canAdd[i]);
+
+    if (notesToAdd.length === 0) {
+      return c.json({
+        success: true,
+        data: {
+          added: 0,
+          skipped: notes.length,
+          message: 'All cards already exist in Anki',
+        },
+      });
+    }
+
+    // Add notes to Anki
+    const results = await ankiClient.addNotes(notesToAdd);
+    const addedCount = results.filter((id) => id !== null).length;
+
+    // TODO: Mark cards as exported in database
+
+    return c.json({
+      success: true,
+      data: {
+        added: addedCount,
+        skipped: notes.length - notesToAdd.length,
+        failed: notesToAdd.length - addedCount,
+        deckName,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({
+      success: false,
+      error: {
+        code: 'ANKI_EXPORT_FAILED',
+        message,
+      },
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/v1/cards/anki-connect/status
+ * Check AnkiConnect availability and get deck list
+ */
+cardsRoutes.get('/anki-connect/status', async (c) => {
+  const ankiClient = getAnkiClient();
+
+  try {
+    const isAvailable = await ankiClient.ping();
+    if (!isAvailable) {
+      return c.json({
+        success: true,
+        data: {
+          available: false,
+          decks: [],
+        },
+      });
+    }
+
+    const decks = await ankiClient.getDecks();
+
+    return c.json({
+      success: true,
+      data: {
+        available: true,
+        decks,
+      },
+    });
+  } catch {
+    return c.json({
+      success: true,
+      data: {
+        available: false,
+        decks: [],
+      },
+    });
+  }
 });
 
 /**

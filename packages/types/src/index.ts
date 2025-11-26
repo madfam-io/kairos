@@ -6,3 +6,4 @@ export * from './subscription';
 export * from './nlp';
 export * from './api';
 export * from './sync';
+export * from './auth';
