@@ -5,6 +5,18 @@ import type { AppEnv, AuthenticatedEnv } from '../types';
 import { requireAuth, requireSubscription, optionalAuth } from '../middleware/auth';
 import { AppError } from '../middleware/error-handler';
 import { getNLPClient } from '../services/nlp-client';
+import {
+  findGrammarInText,
+  getGrammarExplanation,
+  getGrammarByLevel,
+  searchGrammarPatterns,
+  seedGrammarPatterns,
+} from '../services/grammar';
+import {
+  seedJapaneseGrammarPatterns,
+  getJapaneseGrammarByLevel,
+  searchJapaneseGrammarPatterns,
+} from '../services/japanese-grammar';
 
 export const nlpRoutes = new Hono<AppEnv>();
 
@@ -175,9 +187,17 @@ nlpRoutes.post(
   }
 );
 
+const grammarSearchSchema = z.object({
+  query: z.string().min(1).max(100),
+});
+
+const grammarLevelSchema = z.object({
+  level: z.coerce.number().int().min(1).max(6),
+});
+
 /**
  * POST /api/v1/nlp/grammar
- * Get grammar explanation for a pattern
+ * Find grammar patterns in text
  */
 nlpRoutes.post(
   '/grammar',
@@ -187,21 +207,113 @@ nlpRoutes.post(
   async (c) => {
     const { text, targetWord } = c.req.valid('json');
 
-    // TODO: Lookup in grammar database or call LLM
+    // If targetWord is provided, look up that specific pattern
+    if (targetWord) {
+      const pattern = await getGrammarExplanation(targetWord);
+      if (pattern) {
+        return c.json({
+          success: true,
+          data: pattern,
+        });
+      }
+      return c.json({
+        success: true,
+        data: null,
+        message: 'Grammar pattern not found',
+      });
+    }
+
+    // Otherwise, find all patterns in the text
+    const patterns = await findGrammarInText(text);
     return c.json({
       success: true,
       data: {
-        pattern: targetWord ?? text,
-        name: 'Grammar Pattern',
-        nameZh: '语法结构',
-        explanation: 'Explanation pending implementation',
-        structure: 'Structure pending',
-        examples: [],
-        hskLevel: null,
+        text,
+        patterns,
+        count: patterns.length,
       },
     });
   }
 );
+
+/**
+ * GET /api/v1/nlp/grammar/search
+ * Search grammar patterns by query
+ */
+nlpRoutes.get('/grammar/search', zValidator('query', grammarSearchSchema), async (c) => {
+  const { query } = c.req.valid('query');
+  const patterns = await searchGrammarPatterns(query);
+
+  return c.json({
+    success: true,
+    data: {
+      patterns,
+      count: patterns.length,
+    },
+  });
+});
+
+/**
+ * GET /api/v1/nlp/grammar/level/:level
+ * Get all grammar patterns for a specific HSK level
+ */
+nlpRoutes.get('/grammar/level/:level', zValidator('param', grammarLevelSchema), async (c) => {
+  const { level } = c.req.valid('param');
+  const patterns = await getGrammarByLevel(level);
+
+  return c.json({
+    success: true,
+    data: {
+      level,
+      patterns,
+      count: patterns.length,
+    },
+  });
+});
+
+/**
+ * GET /api/v1/nlp/grammar/:pattern
+ * Get specific grammar pattern explanation
+ */
+nlpRoutes.get('/grammar/:pattern', async (c) => {
+  const pattern = decodeURIComponent(c.req.param('pattern'));
+  const result = await getGrammarExplanation(pattern);
+
+  if (!result) {
+    return c.json({
+      success: true,
+      data: null,
+      message: 'Grammar pattern not found',
+    });
+  }
+
+  return c.json({
+    success: true,
+    data: result,
+  });
+});
+
+/**
+ * POST /api/v1/nlp/grammar/seed
+ * Seed grammar patterns into database (admin only)
+ */
+nlpRoutes.post('/grammar/seed', requireAuth(), async (c) => {
+  const user = c.get('user');
+
+  // Check if user is admin
+  if (user.role !== 'admin') {
+    throw new AppError('Forbidden', 403);
+  }
+
+  const inserted = await seedGrammarPatterns();
+  return c.json({
+    success: true,
+    data: {
+      inserted,
+      message: `Seeded ${inserted} grammar patterns`,
+    },
+  });
+});
 
 /**
  * POST /api/v1/nlp/ocr
@@ -263,4 +375,169 @@ nlpRoutes.get('/dictionary/:word', async (c) => {
       },
     });
   }
+});
+
+// ============================================
+// Japanese Language Support
+// ============================================
+
+const japaneseSegmentSchema = z.object({
+  text: z.string().min(1).max(5000),
+  includeReading: z.boolean().default(true),
+  includeDefinitions: z.boolean().default(true),
+  includeJlpt: z.boolean().default(true),
+});
+
+const japaneseGrammarLevelSchema = z.object({
+  level: z.coerce.number().int().min(1).max(5), // JLPT N5=1 to N1=5
+});
+
+/**
+ * POST /api/v1/nlp/japanese/segment
+ * Segment Japanese text into words
+ */
+nlpRoutes.post(
+  '/japanese/segment',
+  optionalAuth(),
+  zValidator('json', japaneseSegmentSchema),
+  async (c) => {
+    const { text, includeReading, includeDefinitions, includeJlpt } = c.req.valid('json');
+    const startTime = Date.now();
+
+    // TODO: Call Japanese NLP service (SudachiPy)
+    // For now, return a placeholder response
+    // In production, this would call the Japanese segmenter
+
+    // Simple character-by-character fallback
+    const segments = text.split('').map((char) => ({
+      text: char,
+      reading: null,
+      readingKatakana: null,
+      dictionaryForm: char,
+      partOfSpeech: null,
+      definitions: [],
+      jlptLevel: null,
+      isPunctuation: /[\s。、！？「」『』【】（）・…ー〜―.,!?()[\]{}\"'\-:;/\\]/.test(char),
+    }));
+
+    return c.json({
+      success: true,
+      data: {
+        segments,
+        rawText: text,
+        wordCount: segments.filter((s) => !s.isPunctuation).length,
+        processingTimeMs: Date.now() - startTime,
+        language: 'ja',
+      },
+    });
+  }
+);
+
+/**
+ * GET /api/v1/nlp/japanese/dictionary/:word
+ * Look up Japanese word in dictionary
+ */
+nlpRoutes.get('/japanese/dictionary/:word', async (c) => {
+  const word = decodeURIComponent(c.req.param('word'));
+
+  // TODO: Call Japanese dictionary service (JMdict)
+  // For now, return a placeholder response
+
+  return c.json({
+    success: true,
+    data: {
+      word,
+      reading: null,
+      readingKatakana: null,
+      definitions: [],
+      jlptLevel: null,
+      partsOfSpeech: [],
+      found: false,
+      language: 'ja',
+    },
+  });
+});
+
+/**
+ * GET /api/v1/nlp/japanese/grammar/level/:level
+ * Get Japanese grammar patterns by JLPT level
+ */
+nlpRoutes.get(
+  '/japanese/grammar/level/:level',
+  zValidator('param', japaneseGrammarLevelSchema),
+  async (c) => {
+    const { level } = c.req.valid('param');
+    const patterns = await getJapaneseGrammarByLevel(level);
+
+    return c.json({
+      success: true,
+      data: {
+        level,
+        jlptName: `N${6 - level}`, // level 1 = N5, level 5 = N1
+        patterns,
+        count: patterns.length,
+      },
+    });
+  }
+);
+
+/**
+ * GET /api/v1/nlp/japanese/grammar/search
+ * Search Japanese grammar patterns
+ */
+nlpRoutes.get(
+  '/japanese/grammar/search',
+  zValidator('query', z.object({ query: z.string().min(1).max(100) })),
+  async (c) => {
+    const { query } = c.req.valid('query');
+    const patterns = await searchJapaneseGrammarPatterns(query);
+
+    return c.json({
+      success: true,
+      data: {
+        patterns,
+        count: patterns.length,
+      },
+    });
+  }
+);
+
+/**
+ * POST /api/v1/nlp/japanese/grammar/seed
+ * Seed Japanese grammar patterns (admin only)
+ */
+nlpRoutes.post('/japanese/grammar/seed', requireAuth(), async (c) => {
+  const user = c.get('user');
+
+  if (user.role !== 'admin') {
+    throw new AppError('Forbidden', 403);
+  }
+
+  const inserted = await seedJapaneseGrammarPatterns();
+  return c.json({
+    success: true,
+    data: {
+      inserted,
+      message: `Seeded ${inserted} Japanese grammar patterns`,
+    },
+  });
+});
+
+/**
+ * GET /api/v1/nlp/japanese/jlpt/:word
+ * Get JLPT level for a word
+ */
+nlpRoutes.get('/japanese/jlpt/:word', async (c) => {
+  const word = decodeURIComponent(c.req.param('word'));
+
+  // TODO: Look up in JLPT classifier
+  return c.json({
+    success: true,
+    data: {
+      word,
+      jlptLevel: null,
+      jlptName: null,
+      found: false,
+    },
+  });
 });

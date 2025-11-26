@@ -41,9 +41,9 @@ Free (beta period)
 | Feature | Priority | Status |
 |---------|----------|--------|
 | AI Simplification Engine (Qwen3) | P0 | Implemented |
-| Pre-computed simplification packs | P1 | Planned |
+| Pre-computed simplification packs | P1 | Implemented |
 | Pitch visualization (Shadowing) | P0 | Implemented |
-| Grammar explainer tooltips | P1 | Planned |
+| Grammar explainer tooltips | P1 | Implemented |
 | Mobile app (iOS + Android) | P0 | Implemented |
 | Hard-sub OCR (PaddleOCR) | P1 | Implemented |
 | Payment integration (Janua) | P0 | Implemented |
@@ -72,12 +72,12 @@ Free (beta period)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
-| Shared vocabulary decks | P0 | Planned |
-| "Classroom Mode" for tutors | P1 | Planned |
-| Pre-simplified packs (50+ shows) | P1 | Planned |
-| Leaderboards + social features | P2 | Planned |
+| Shared vocabulary decks | P0 | Implemented |
+| "Classroom Mode" for tutors | P1 | Implemented |
+| Pre-simplified packs (50+ shows) | P1 | Implemented |
+| Leaderboards + social features | P2 | Implemented |
 | API for third-party integrations | P2 | Planned |
-| Affiliate/referral program | P1 | Planned |
+| Affiliate/referral program | P1 | Implemented |
 
 ### Milestones
 
@@ -95,11 +95,11 @@ Free (beta period)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
-| Japanese language support | P1 | Planned |
+| Japanese language support | P1 | Implemented |
 | Advanced analytics dashboard | P2 | Planned |
 | Enterprise/institutional tier | P2 | Planned |
-| Native Windows/Mac apps | P1 | Planned |
-| Offline mode (full) | P1 | Planned |
+| Native Windows/Mac apps | P1 | Implemented |
+| Offline mode (full) | P1 | Implemented |
 
 ---
 
@@ -195,31 +195,46 @@ Month 4+: Growth Phase
 
 ### Completed
 
+**Core Infrastructure:**
 - Backend API (Bun + Hono + Drizzle)
 - Database schema (PostgreSQL)
 - Auth system (Janua)
 - CRDT sync engine
-- PaddleNLP segmentation service
-- CC-CEDICT dictionary service
-- Qwen3 simplification service
-- FCPE pitch detection service
-- SenseVoice ASR service
-- CosyVoice + Fish Speech TTS services
-- Mobile app (Expo + React Native 0.77)
-- Desktop app (Tauri 2.1)
-- Browser extension (Chrome/Firefox)
-- Payment integration (Stripe, Conekta, Polar via Janua)
-- Anki export (CSV, JSON, AnkiConnect, text import)
 - Docker deployment (Enclii)
 - Integration tests
 
+**NLP Services:**
+- PaddleNLP segmentation service (Chinese)
+- CC-CEDICT dictionary service
+- Qwen3 simplification service
+- Pre-computed simplification packs
+- Grammar explainer tooltips (Chinese & Japanese)
+- Japanese language support (SudachiPy + JMdict + JLPT)
+
+**Speech Services:**
+- FCPE pitch detection service
+- SenseVoice ASR service
+- CosyVoice + Fish Speech TTS services
+- Hard-sub OCR (PaddleOCR)
+
+**Client Apps:**
+- Mobile app (Expo + React Native 0.77)
+- Desktop app (Tauri 2.1)
+- Browser extension (Chrome/Firefox)
+
+**User Features:**
+- Payment integration (Stripe, Conekta, Polar via Janua)
+- Anki export (CSV, JSON, AnkiConnect, text import)
+- Shared vocabulary decks (community)
+- Classroom mode (for tutors)
+- Affiliate/referral program
+- Full offline mode
+
 ### Planned
 
-- Pre-computed simplification packs
-- Grammar explainer tooltips
-- Shared decks
-- Classroom mode
-- Japanese support
+- Advanced analytics dashboard
+- Enterprise/institutional tier
+- Third-party API integrations
 
 ---
 

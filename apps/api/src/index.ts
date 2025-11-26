@@ -16,6 +16,11 @@ import billingRoutes from './routes/billing';
 import pitchRoutes from './routes/pitch';
 import speechRoutes from './routes/speech';
 import { contentRoutes } from './routes/content';
+import { sharedDecksRoutes } from './routes/shared-decks';
+import { referralsRoutes } from './routes/referrals';
+import { simplificationPacksRoutes } from './routes/simplification-packs';
+import { classroomRoutes } from './routes/classroom';
+import { offlineRoutes } from './routes/offline';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -70,6 +75,11 @@ api.route('/billing', billingRoutes);
 api.route('/pitch', pitchRoutes);
 api.route('/speech', speechRoutes);
 api.route('/content', contentRoutes);
+api.route('/decks', sharedDecksRoutes);
+api.route('/referrals', referralsRoutes);
+api.route('/packs', simplificationPacksRoutes);
+api.route('/classroom', classroomRoutes);
+api.route('/offline', offlineRoutes);
 
 // Error handling
 app.onError(errorHandler);
