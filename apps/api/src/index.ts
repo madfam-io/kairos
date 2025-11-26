@@ -12,6 +12,7 @@ import { cardsRoutes } from './routes/cards';
 import { nlpRoutes } from './routes/nlp';
 import { syncRoutes } from './routes/sync';
 import { analyticsRoutes } from './routes/analytics';
+import billingRoutes from './routes/billing';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -62,6 +63,7 @@ api.route('/cards', cardsRoutes);
 api.route('/nlp', nlpRoutes);
 api.route('/sync', syncRoutes);
 api.route('/analytics', analyticsRoutes);
+api.route('/billing', billingRoutes);
 
 // Error handling
 app.onError(errorHandler);

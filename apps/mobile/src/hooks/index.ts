@@ -4,3 +4,4 @@ export { useVocabulary, useVocabularyStore, type VocabularyItem, type Vocabulary
 export { useCards, useCardsStore, type Card, type ReviewRating } from './useCards';
 export { useStats, useStatsStore, type Stats, type RecentWord } from './useStats';
 export { useSettings, useSettingsStore, type Settings } from './useSettings';
+export { useSubscription, useSubscriptionStore, type SubscriptionTier, type Subscription, type TierLimits } from './useSubscription';

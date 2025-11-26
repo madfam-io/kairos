@@ -53,6 +53,13 @@ export default function RootLayout() {
                 presentation: 'fullScreenModal',
               }}
             />
+            <Stack.Screen
+              name="subscription"
+              options={{
+                headerShown: false,
+                presentation: 'modal',
+              }}
+            />
           </Stack>
         </AuthProvider>
       </ThemeProvider>
