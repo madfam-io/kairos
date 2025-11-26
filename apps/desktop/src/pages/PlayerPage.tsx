@@ -13,13 +13,13 @@ import {
   ArrowLeft,
   Subtitles,
   Zap,
-  BookPlus,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import clsx from 'clsx';
 
 import { SubtitleOverlay } from '~/components/player/SubtitleOverlay';
 import { SubtitleSidebar } from '~/components/player/SubtitleSidebar';
+import { MiningModal } from '~/components/player/MiningModal';
 import { useVideoStore } from '~/store/video';
 import { useSettingsStore } from '~/store/settings';
 import { useSubtitles } from '~/hooks/useSubtitles';
@@ -29,8 +29,8 @@ export function PlayerPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { currentVideo, addRecentVideo } = useVideoStore();
-  const { hskLevel, simplificationEnabled, showPinyin } = useSettingsStore();
+  const { currentVideo, addRecentVideo, updateVideoProgress } = useVideoStore();
+  const { targetHSKLevel, autoSimplify, showPinyin, setAutoSimplify } = useSettingsStore();
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -41,8 +41,15 @@ export function PlayerPage() {
   const [showControls, setShowControls] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
 
+  // Mining modal state
+  const [miningWord, setMiningWord] = useState<string | null>(null);
+  const [miningSentence, setMiningSentence] = useState<string>('');
+
   // Load subtitles
-  const { subtitles, currentSubtitle, loadSubtitles } = useSubtitles(currentTime);
+  const { subtitles, currentSubtitle, currentIndex } = useSubtitles({
+    videoPath: currentVideo,
+    currentTime,
+  });
 
   // Convert local file path to Tauri asset URL
   const videoSrc = currentVideo ? convertFileSrc(currentVideo) : null;
@@ -107,10 +114,12 @@ export function PlayerPage() {
           break;
         case 's':
           e.preventDefault();
-          // Toggle simplification
+          setAutoSimplify(!autoSimplify);
           break;
         case 'Escape':
-          if (isFullscreen) {
+          if (miningWord) {
+            setMiningWord(null);
+          } else if (isFullscreen) {
             toggleFullscreen();
           } else {
             navigate('/');
@@ -121,7 +130,7 @@ export function PlayerPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, isFullscreen]);
+  }, [isPlaying, isFullscreen, autoSimplify, miningWord]);
 
   // Add to recent on load
   useEffect(() => {
@@ -134,6 +143,14 @@ export function PlayerPage() {
       });
     }
   }, [currentVideo]);
+
+  // Save progress periodically
+  useEffect(() => {
+    if (currentVideo && duration > 0) {
+      const progress = currentTime / duration;
+      updateVideoProgress(currentVideo, progress);
+    }
+  }, [currentTime, duration, currentVideo]);
 
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
@@ -190,6 +207,21 @@ export function PlayerPage() {
     }
   }, []);
 
+  const handleWordClick = useCallback((word: string, sentence: string) => {
+    // Just show tooltip, don't open mining modal
+    console.log('Word clicked:', word);
+  }, []);
+
+  const handleMineWord = useCallback((word: string, sentence: string) => {
+    setMiningWord(word);
+    setMiningSentence(sentence);
+    // Pause video when mining
+    if (videoRef.current && isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [isPlaying]);
+
   // Apply volume
   useEffect(() => {
     if (videoRef.current) {
@@ -224,9 +256,9 @@ export function PlayerPage() {
         {currentSubtitle && (
           <SubtitleOverlay
             subtitle={currentSubtitle}
-            hskLevel={hskLevel}
-            showPinyin={showPinyin}
-            showSimplified={simplificationEnabled}
+            simplified={autoSimplify ? undefined : undefined} // TODO: fetch simplified
+            onWordClick={handleWordClick}
+            onMineWord={handleMineWord}
           />
         )}
 
@@ -252,18 +284,20 @@ export function PlayerPage() {
             </div>
           </div>
 
-          {/* Center play button */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <button
-              onClick={togglePlay}
-              className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 flex items-center justify-center transition-colors"
-            >
-              {isPlaying ? <Pause size={40} /> : <Play size={40} className="ml-1" />}
-            </button>
-          </div>
+          {/* Center play button (only when paused) */}
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                onClick={togglePlay}
+                className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 flex items-center justify-center transition-colors"
+              >
+                <Play size={40} className="ml-1" />
+              </button>
+            </div>
+          )}
 
           {/* Bottom controls */}
-          <div className="video-controls">
+          <div className="video-controls absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
             {/* Progress bar */}
             <div className="mb-3">
               <input
@@ -293,12 +327,14 @@ export function PlayerPage() {
                 <button
                   onClick={() => skip(-10)}
                   className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  title="Skip back 10s"
                 >
                   <SkipBack size={20} />
                 </button>
                 <button
                   onClick={() => skip(10)}
                   className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  title="Skip forward 10s"
                 >
                   <SkipForward size={20} />
                 </button>
@@ -331,16 +367,17 @@ export function PlayerPage() {
               <div className="flex items-center gap-2">
                 {/* Simplification toggle */}
                 <button
+                  onClick={() => setAutoSimplify(!autoSimplify)}
                   className={clsx(
                     'p-2 rounded-lg transition-colors',
-                    simplificationEnabled ? 'bg-kairos-600 text-white' : 'hover:bg-white/10'
+                    autoSimplify ? 'bg-kairos-600 text-white' : 'hover:bg-white/10'
                   )}
                   title="Toggle AI Simplification (S)"
                 >
                   <Zap size={20} />
                 </button>
 
-                {/* Subtitles */}
+                {/* Subtitles sidebar */}
                 <button
                   onClick={() => setShowSidebar(!showSidebar)}
                   className={clsx(
@@ -354,6 +391,7 @@ export function PlayerPage() {
 
                 {/* Settings */}
                 <button
+                  onClick={() => navigate('/settings')}
                   className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                   title="Settings"
                 >
@@ -374,19 +412,33 @@ export function PlayerPage() {
         </div>
       </div>
 
-      {/* Sidebar */}
-      {showSidebar && (
-        <SubtitleSidebar
-          subtitles={subtitles}
-          currentTime={currentTime}
-          onSeek={(time) => {
-            if (videoRef.current) {
-              videoRef.current.currentTime = time;
-            }
-          }}
-          onClose={() => setShowSidebar(false)}
-        />
-      )}
+      {/* Subtitle Sidebar */}
+      <SubtitleSidebar
+        subtitles={subtitles}
+        currentIndex={currentIndex}
+        onSeek={(time) => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = time;
+          }
+        }}
+        isOpen={showSidebar}
+        onToggle={() => setShowSidebar(!showSidebar)}
+      />
+
+      {/* Mining Modal */}
+      <MiningModal
+        isOpen={!!miningWord}
+        word={miningWord || ''}
+        sentence={miningSentence}
+        sourceTitle={currentVideo?.split('/').pop()}
+        onClose={() => {
+          setMiningWord(null);
+          // Resume playback after closing
+          if (videoRef.current) {
+            videoRef.current.play();
+          }
+        }}
+      />
     </div>
   );
 }
