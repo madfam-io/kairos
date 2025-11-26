@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-800;
+  }
+
+  body {
+    @apply bg-gray-950 text-white;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer components {
+  /* Video player custom styles */
+  .video-container {
+    @apply relative w-full h-full bg-black;
+  }
+
+  .video-controls {
+    @apply absolute bottom-0 left-0 right-0;
+    @apply bg-gradient-to-t from-black/80 to-transparent;
+    @apply px-4 py-3;
+  }
+
+  /* Subtitle overlay */
+  .subtitle-overlay {
+    @apply absolute bottom-20 left-1/2 -translate-x-1/2;
+    @apply max-w-4xl w-full px-4;
+  }
+
+  .subtitle-text {
+    @apply text-2xl font-chinese text-white text-center;
+    @apply bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Word highlighting */
+  .word {
+    @apply inline-block cursor-pointer transition-colors duration-100;
+  }
+
+  .word:hover {
+    @apply text-kairos-400;
+  }
+
+  .word.unknown {
+    @apply border-b border-dashed border-white/50;
+  }
+
+  .word.known {
+    @apply opacity-70;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    @apply w-80 bg-gray-900 border-l border-gray-800;
+    @apply flex flex-col h-full;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-gray-900 rounded-xl border border-gray-800;
+    @apply p-4 transition-colors;
+  }
+
+  .card:hover {
+    @apply border-gray-700;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Drag region for window */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
