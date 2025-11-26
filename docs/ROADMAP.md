@@ -96,7 +96,7 @@ Free (beta period)
 | Feature | Priority | Status |
 |---------|----------|--------|
 | Japanese language support | P1 | Implemented |
-| Advanced analytics dashboard | P2 | Planned |
+| Advanced analytics dashboard | P2 | Implemented |
 | Enterprise/institutional tier | P2 | Planned |
 | Native Windows/Mac apps | P1 | Implemented |
 | Offline mode (full) | P1 | Implemented |
@@ -230,9 +230,17 @@ Month 4+: Growth Phase
 - Affiliate/referral program
 - Full offline mode
 
+**Analytics & Insights:**
+- Advanced analytics dashboard with real database queries
+- Daily/weekly/monthly progress tracking
+- Vocabulary growth charts with HSK breakdown
+- Activity heatmap (GitHub-style)
+- Retention and mastery analysis
+- Learning goals and milestones
+- AI-generated learning insights and recommendations
+
 ### Planned
 
-- Advanced analytics dashboard
 - Enterprise/institutional tier
 - Third-party API integrations
 
