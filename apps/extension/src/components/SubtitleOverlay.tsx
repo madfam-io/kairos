@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { sendToBackground } from '@plasmohq/messaging';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { UserSettings, Segment } from '@kairos/types';
 
@@ -149,14 +150,14 @@ function Word({ segment, settings, onHover, onLeave, onClick }: WordProps) {
 
   return (
     <span
-      className={`kairos-word ${segment.isKnown ? 'known' : 'unknown'}`}
+      className={`kairos-word relative ${segment.isKnown ? 'known' : 'unknown'}`}
       onMouseEnter={(e) => onHover(segment, e)}
       onMouseLeave={onLeave}
       onClick={onClick}
     >
       {segment.text}
       {settings?.showPinyin && segment.pinyin && (
-        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-gray-300 whitespace-nowrap">
+        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-gray-300/80 whitespace-nowrap pointer-events-none">
           {segment.pinyin}
         </span>
       )}
@@ -170,14 +171,63 @@ interface SimplifiedSubtitleProps {
 }
 
 function SimplifiedSubtitle({ text, targetLevel }: SimplifiedSubtitleProps) {
-  // TODO: Fetch simplified version from API
   const [simplified, setSimplified] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // For now, show placeholder
+  // Fetch simplified version when text changes
+  useEffect(() => {
+    if (!text || text.length < 2) {
+      setSimplified(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    // Debounce the API call
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await sendToBackground({
+          name: 'simplify-text',
+          body: {
+            text,
+            targetLevel,
+          },
+        });
+
+        if (cancelled) return;
+
+        if (response?.success && response.data?.simplifiedText) {
+          // Only show if different from original
+          if (response.data.simplifiedText !== text) {
+            setSimplified(response.data.simplifiedText);
+          } else {
+            setSimplified(null);
+          }
+        } else {
+          setSimplified(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Simplification error:', err);
+          setSimplified(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }, 300); // 300ms debounce
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [text, targetLevel]);
+
   if (isLoading) {
     return (
-      <div className="kairos-simplified animate-pulse">
+      <div className="kairos-simplified mt-2 pt-2 border-t border-white/20 animate-pulse">
         <span className="inline-block h-4 w-48 bg-white/20 rounded" />
       </div>
     );
@@ -190,7 +240,7 @@ function SimplifiedSubtitle({ text, targetLevel }: SimplifiedSubtitleProps) {
   return (
     <div className="kairos-simplified mt-2 pt-2 border-t border-white/20">
       <span className="text-xs text-kairos-400 mr-2">HSK {targetLevel}:</span>
-      {simplified}
+      <span className="font-chinese">{simplified}</span>
     </div>
   );
 }

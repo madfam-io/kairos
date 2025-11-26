@@ -1,0 +1,278 @@
+# Kairos Enclii Deployment Configuration
+# Deploy with: enclii deploy
+# https://github.com/madfam-io/enclii
+
+name: kairos
+description: The Intelligent Chinese Immersion Engine
+
+# Environment configuration
+environment:
+  # Production
+  production:
+    domain: kairos.dev
+    ssl: true
+    replicas:
+      api: 2
+      nlp: 1
+      simplify: 1
+      pitch: 1
+      speech: 1
+
+  # Staging
+  staging:
+    domain: staging.kairos.dev
+    ssl: true
+    replicas:
+      api: 1
+      nlp: 1
+      simplify: 1
+      pitch: 1
+      speech: 1
+
+# Services
+services:
+  # =============================================================================
+  # Core API
+  # =============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    port: 3000
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 10s
+    resources:
+      cpu: 1
+      memory: 1Gi
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - JANUA_API_URL
+      - JANUA_PUBLISHABLE_KEY
+      - NLP_SERVICE_URL=http://nlp:8000
+      - SIMPLIFY_SERVICE_URL=http://simplify:8001
+      - PITCH_SERVICE_URL=http://pitch:8002
+      - SPEECH_SERVICE_URL=http://speech:8003
+      - STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET
+      - CONEKTA_API_KEY
+      - CONEKTA_WEBHOOK_KEY
+      - POLAR_ACCESS_TOKEN
+      - POLAR_ORGANIZATION_ID
+    depends_on:
+      - postgres
+      - redis
+      - nlp
+
+  # =============================================================================
+  # AI Services
+  # =============================================================================
+  nlp:
+    build:
+      context: ./services/nlp
+      dockerfile: Dockerfile
+    port: 8000
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+    resources:
+      cpu: 2
+      memory: 4Gi
+    volumes:
+      - nlp-models:/app/models
+      - ./services/nlp/data:/app/data:ro
+
+  simplify:
+    build:
+      context: ./services/simplify
+      dockerfile: Dockerfile
+    port: 8001
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 30s
+      start_period: 300s
+    resources:
+      cpu: 4
+      memory: 24Gi
+      gpu: 1
+      gpu_type: a10g
+    env:
+      - MODEL_ID=Qwen/Qwen3-30B-A3B
+      - HF_TOKEN
+      - REDIS_URL
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+
+  pitch:
+    build:
+      context: ./services/pitch
+      dockerfile: Dockerfile
+    port: 8002
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+    resources:
+      cpu: 2
+      memory: 8Gi
+      gpu: 1
+      gpu_type: t4
+    volumes:
+      - pitch-models:/app/models
+
+  speech:
+    build:
+      context: ./services/speech
+      dockerfile: Dockerfile
+    port: 8003
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 30s
+      start_period: 300s
+    resources:
+      cpu: 4
+      memory: 16Gi
+      gpu: 1
+      gpu_type: a10g
+    env:
+      - HF_TOKEN
+    volumes:
+      - speech-models:/app/models
+      - huggingface-cache:/root/.cache/huggingface
+
+  # =============================================================================
+  # Infrastructure
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    port: 5432
+    resources:
+      cpu: 1
+      memory: 2Gi
+    env:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB=kairos
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    backup:
+      enabled: true
+      schedule: "0 2 * * *"  # Daily at 2 AM
+      retention: 7
+
+  redis:
+    image: redis:7-alpine
+    port: 6379
+    resources:
+      cpu: 0.5
+      memory: 512Mi
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+# Volumes
+volumes:
+  postgres-data:
+    size: 50Gi
+    type: ssd
+  redis-data:
+    size: 10Gi
+    type: ssd
+  nlp-models:
+    size: 10Gi
+    type: ssd
+  pitch-models:
+    size: 5Gi
+    type: ssd
+  speech-models:
+    size: 20Gi
+    type: ssd
+  huggingface-cache:
+    size: 100Gi
+    type: ssd
+
+# Networking
+networking:
+  # Public endpoints
+  ingress:
+    - service: api
+      domain: api.kairos.dev
+      paths:
+        - /
+      rate_limit:
+        requests_per_minute: 100
+        burst: 20
+
+  # Internal network
+  internal:
+    - nlp
+    - simplify
+    - pitch
+    - speech
+    - postgres
+    - redis
+
+# Secrets (managed via enclii secrets)
+secrets:
+  - DATABASE_URL
+  - POSTGRES_USER
+  - POSTGRES_PASSWORD
+  - JANUA_API_URL
+  - JANUA_PUBLISHABLE_KEY
+  - JANUA_JWT_SECRET
+  - STRIPE_SECRET_KEY
+  - STRIPE_WEBHOOK_SECRET
+  - CONEKTA_API_KEY
+  - CONEKTA_WEBHOOK_KEY
+  - POLAR_ACCESS_TOKEN
+  - POLAR_ORGANIZATION_ID
+  - HF_TOKEN
+
+# Monitoring
+monitoring:
+  enabled: true
+  metrics:
+    - service: api
+      path: /metrics
+    - service: nlp
+      path: /metrics
+  alerts:
+    - name: high-error-rate
+      condition: error_rate > 5%
+      duration: 5m
+      severity: critical
+    - name: high-latency
+      condition: p99_latency > 2s
+      duration: 5m
+      severity: warning
+    - name: low-disk-space
+      condition: disk_usage > 85%
+      duration: 10m
+      severity: warning
+
+# Scaling
+autoscaling:
+  api:
+    min: 1
+    max: 5
+    target_cpu: 70
+    target_memory: 80
+  nlp:
+    min: 1
+    max: 3
+    target_cpu: 80
+
+# CI/CD hooks
+hooks:
+  pre_deploy:
+    - bun run typecheck
+    - bun test
+  post_deploy:
+    - bun run db:migrate

@@ -1,6 +1,8 @@
 import type { ErrorHandler } from 'hono';
 import type { AppEnv } from '../types';
 import type { ApiErrorCode } from '@kairos/types';
+import { log } from '../lib/logger';
+import { captureException } from '../lib/sentry';
 
 export class AppError extends Error {
   constructor(
@@ -43,9 +45,44 @@ export class AppError extends Error {
 }
 
 export const errorHandler: ErrorHandler<AppEnv> = (err, c) => {
-  console.error('Error:', err);
+  const requestId = c.get('requestId') ?? 'unknown';
+  const user = c.get('user');
+  const method = c.req.method;
+  const path = c.req.path;
 
   if (err instanceof AppError) {
+    // Expected application errors - log at appropriate level
+    if (err.statusCode >= 500) {
+      log.error(`${method} ${path} - ${err.message}`, err, {
+        requestId,
+        userId: user?.id,
+        code: err.code,
+        statusCode: err.statusCode,
+      });
+
+      // Report 5xx errors to Sentry
+      captureException(err, {
+        user: user ? { id: user.id, email: user.email } : undefined,
+        tags: {
+          errorCode: err.code,
+          path,
+          method,
+        },
+        extra: {
+          details: err.details,
+        },
+        requestId,
+      });
+    } else if (err.statusCode >= 400) {
+      // Client errors - log as warning
+      log.warn(`${method} ${path} - ${err.message}`, {
+        requestId,
+        userId: user?.id,
+        code: err.code,
+        statusCode: err.statusCode,
+      });
+    }
+
     return c.json(
       {
         success: false,
@@ -55,14 +92,34 @@ export const errorHandler: ErrorHandler<AppEnv> = (err, c) => {
           details: err.details,
         },
         meta: {
-          requestId: c.get('requestId'),
+          requestId,
         },
       },
       err.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500
     );
   }
 
-  // Unknown error
+  // Unexpected errors - always log and report
+  log.error(`${method} ${path} - Unexpected error`, err, {
+    requestId,
+    userId: user?.id,
+    stack: err.stack,
+  });
+
+  captureException(err, {
+    user: user ? { id: user.id, email: user.email } : undefined,
+    tags: {
+      errorCode: 'INTERNAL_ERROR',
+      path,
+      method,
+      unexpected: 'true',
+    },
+    extra: {
+      stack: err.stack,
+    },
+    requestId,
+  });
+
   return c.json(
     {
       success: false,
@@ -71,7 +128,7 @@ export const errorHandler: ErrorHandler<AppEnv> = (err, c) => {
         message: 'An unexpected error occurred',
       },
       meta: {
-        requestId: c.get('requestId'),
+        requestId,
       },
     },
     500

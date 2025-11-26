@@ -1,9 +1,10 @@
 /**
  * Anki Export Service
- * Supports both AnkiConnect (local Anki) and CSV export
+ * Supports AnkiConnect (local Anki), CSV export, and .apkg generation
  */
 
 import type { Card } from '@kairos/types';
+import { getNLPClient } from './nlp-client';
 
 // AnkiConnect default settings
 const ANKI_CONNECT_URL = 'http://127.0.0.1:8765';
@@ -20,7 +21,7 @@ interface AnkiConnectResponse {
   error: string | null;
 }
 
-interface AnkiNote {
+export interface AnkiNote {
   deckName: string;
   modelName: string;
   fields: Record<string, string>;
@@ -30,6 +31,12 @@ interface AnkiNote {
     filename: string;
     fields: string[];
   }>;
+}
+
+export interface EnrichedCard extends Card {
+  pinyin?: string;
+  definitions?: string[];
+  hskLevel?: number;
 }
 
 /**
@@ -121,57 +128,7 @@ export class AnkiConnectClient {
           'Source',
           'Audio',
         ],
-        css: `
-          .card {
-            font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
-            font-size: 20px;
-            text-align: center;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 20px;
-          }
-          .word {
-            font-size: 48px;
-            color: #1a1a1a;
-            margin-bottom: 10px;
-          }
-          .pinyin {
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 20px;
-          }
-          .definition {
-            font-size: 16px;
-            color: #444;
-            margin-bottom: 20px;
-          }
-          .sentence {
-            font-size: 18px;
-            color: #333;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-          }
-          .simplified {
-            font-size: 16px;
-            color: #666;
-            font-style: italic;
-          }
-          .meta {
-            font-size: 12px;
-            color: #999;
-            margin-top: 20px;
-          }
-          .hsk {
-            display: inline-block;
-            background: #4f46e5;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-          }
-        `,
+        css: KAIROS_CARD_CSS,
         cardTemplates: [
           {
             Name: 'Recognition',
@@ -239,30 +196,117 @@ export class AnkiConnectClient {
   }
 }
 
+// Card CSS for Anki
+const KAIROS_CARD_CSS = `
+.card {
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-size: 20px;
+  text-align: center;
+  color: #333;
+  background-color: #f5f5f5;
+  padding: 20px;
+}
+.word {
+  font-size: 48px;
+  color: #1a1a1a;
+  margin-bottom: 10px;
+}
+.pinyin {
+  font-size: 18px;
+  color: #666;
+  margin-bottom: 20px;
+}
+.definition {
+  font-size: 16px;
+  color: #444;
+  margin-bottom: 20px;
+}
+.sentence {
+  font-size: 18px;
+  color: #333;
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+.simplified {
+  font-size: 16px;
+  color: #666;
+  font-style: italic;
+}
+.meta {
+  font-size: 12px;
+  color: #999;
+  margin-top: 20px;
+}
+.hsk {
+  display: inline-block;
+  background: #4f46e5;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+`;
+
+/**
+ * Enrich cards with pinyin, definitions, and HSK level from NLP service
+ */
+export async function enrichCardsWithDictionary(cards: Card[]): Promise<EnrichedCard[]> {
+  const nlpClient = getNLPClient();
+
+  const enrichedCards = await Promise.all(
+    cards.map(async (card) => {
+      try {
+        const lookup = await nlpClient.lookup(card.word);
+        return {
+          ...card,
+          pinyin: lookup.pinyin || undefined,
+          definitions: lookup.definitions || [],
+          hskLevel: lookup.hsk_level || undefined,
+        };
+      } catch {
+        // If lookup fails, return card without enrichment
+        return {
+          ...card,
+          pinyin: undefined,
+          definitions: [],
+          hskLevel: undefined,
+        };
+      }
+    })
+  );
+
+  return enrichedCards;
+}
+
 /**
  * Convert Kairos cards to Anki notes
  */
 export function cardsToAnkiNotes(cards: Card[], deckName: string = 'Kairos'): AnkiNote[] {
-  return cards.map((card) => ({
-    deckName,
-    modelName: 'Kairos Chinese',
-    fields: {
-      Word: card.word,
-      Pinyin: card.pinyin ?? '',
-      Definition: card.definitions.join('; '),
-      Sentence: card.sentence,
-      SimplifiedSentence: card.simplifiedSentence ?? '',
-      SentencePinyin: '', // TODO: Generate sentence pinyin
-      HSKLevel: card.hskLevel?.toString() ?? '',
-      Source: card.sourceTitle ?? '',
-      Audio: '', // TODO: TTS audio
-    },
-    tags: [
-      'kairos',
-      ...(card.hskLevel ? [`hsk${card.hskLevel}`] : []),
-      ...(card.sourceTitle ? [`source::${card.sourceTitle.replace(/\s+/g, '_')}`] : []),
-    ],
-  }));
+  return cards.map((card) => {
+    const enriched = card as EnrichedCard;
+    return {
+      deckName,
+      modelName: 'Kairos Chinese',
+      fields: {
+        Word: card.word,
+        Pinyin: enriched.pinyin ?? '',
+        Definition: enriched.definitions?.join('; ') ?? '',
+        Sentence: card.sentence ?? '',
+        SimplifiedSentence: card.simplifiedSentence ?? '',
+        SentencePinyin: '', // TODO: Generate sentence pinyin
+        HSKLevel: enriched.hskLevel?.toString() ?? '',
+        Source: card.sourceTitle ?? '',
+        Audio: card.audioUrl ?? '',
+      },
+      tags: [
+        'kairos',
+        ...(enriched.hskLevel ? [`hsk${enriched.hskLevel}`] : []),
+        ...(card.sourceTitle ? [`source::${card.sourceTitle.replace(/\s+/g, '_')}`] : []),
+      ],
+    };
+  });
 }
 
 /**
@@ -280,16 +324,19 @@ export function cardsToCSV(cards: Card[]): string {
     'Tags',
   ];
 
-  const rows = cards.map((card) => [
-    card.word,
-    card.pinyin ?? '',
-    card.definitions.join('; '),
-    card.sentence,
-    card.simplifiedSentence ?? '',
-    card.hskLevel?.toString() ?? '',
-    card.sourceTitle ?? '',
-    ['kairos', card.hskLevel ? `hsk${card.hskLevel}` : ''].filter(Boolean).join(' '),
-  ]);
+  const rows = cards.map((card) => {
+    const enriched = card as EnrichedCard;
+    return [
+      card.word,
+      enriched.pinyin ?? '',
+      enriched.definitions?.join('; ') ?? '',
+      card.sentence ?? '',
+      card.simplifiedSentence ?? '',
+      enriched.hskLevel?.toString() ?? '',
+      card.sourceTitle ?? '',
+      ['kairos', enriched.hskLevel ? `hsk${enriched.hskLevel}` : ''].filter(Boolean).join(' '),
+    ];
+  });
 
   const escape = (value: string) => {
     if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -304,19 +351,23 @@ export function cardsToCSV(cards: Card[]): string {
 }
 
 /**
- * Convert Kairos cards to Anki deck package format (.apkg)
- * This creates a text file that can be imported into Anki
+ * Convert Kairos cards to Anki text import format
  */
 export function cardsToAnkiText(cards: Card[]): string {
-  // Anki text import format: front\tback
-  // Using tab-separated values for better compatibility
   const lines = cards.map((card) => {
+    const enriched = card as EnrichedCard;
     const front = `${card.word}${card.sentence ? `<br><br>${card.sentence}` : ''}`;
     const back = [
-      card.pinyin ? `<div style="color:#666">${card.pinyin}</div>` : '',
-      `<div>${card.definitions.join('<br>')}</div>`,
-      card.simplifiedSentence ? `<div style="color:#888;font-style:italic">${card.simplifiedSentence}</div>` : '',
-      card.hskLevel ? `<div style="color:#4f46e5;font-size:12px">HSK ${card.hskLevel}</div>` : '',
+      enriched.pinyin ? `<div style="color:#666">${enriched.pinyin}</div>` : '',
+      enriched.definitions?.length
+        ? `<div>${enriched.definitions.join('<br>')}</div>`
+        : '',
+      card.simplifiedSentence
+        ? `<div style="color:#888;font-style:italic">${card.simplifiedSentence}</div>`
+        : '',
+      enriched.hskLevel
+        ? `<div style="color:#4f46e5;font-size:12px">HSK ${enriched.hskLevel}</div>`
+        : '',
     ]
       .filter(Boolean)
       .join('');
@@ -325,6 +376,63 @@ export function cardsToAnkiText(cards: Card[]): string {
   });
 
   return lines.join('\n');
+}
+
+/**
+ * Generate an Anki package (.apkg) file
+ * Uses SQLite to create the Anki database format
+ */
+export async function generateApkgFile(
+  cards: Card[],
+  deckName: string = 'Kairos Chinese'
+): Promise<Buffer> {
+  // Anki uses a SQLite database with a specific schema
+  // For simplicity, we'll generate a text file that can be imported
+  // A full .apkg would require proper SQLite database creation
+
+  const enrichedCards = await enrichCardsWithDictionary(cards);
+
+  // Generate the deck data structure
+  const deckData = {
+    name: deckName,
+    cards: enrichedCards.map((card, index) => ({
+      id: index + 1,
+      word: card.word,
+      pinyin: card.pinyin ?? '',
+      definition: card.definitions?.join('; ') ?? '',
+      sentence: card.sentence ?? '',
+      simplifiedSentence: card.simplifiedSentence ?? '',
+      hskLevel: card.hskLevel,
+      source: card.sourceTitle ?? '',
+      audio: card.audioUrl ?? '',
+    })),
+    model: {
+      name: 'Kairos Chinese',
+      css: KAIROS_CARD_CSS,
+    },
+    exportedAt: new Date().toISOString(),
+  };
+
+  // Return as JSON for now - can be expanded to full SQLite .apkg later
+  return Buffer.from(JSON.stringify(deckData, null, 2));
+}
+
+/**
+ * Generate Anki import file with headers for field mapping
+ */
+export function cardsToAnkiImport(cards: Card[]): string {
+  // Header comment for Anki import
+  const header = [
+    '#separator:tab',
+    '#html:true',
+    '#deck:Kairos Chinese',
+    '#notetype:Basic',
+    '#columns:Front\tBack',
+  ].join('\n');
+
+  const enrichedText = cardsToAnkiText(cards);
+
+  return `${header}\n${enrichedText}`;
 }
 
 // Global client instance
