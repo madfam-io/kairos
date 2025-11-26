@@ -12,11 +12,11 @@ Development is organized into 4 phases over 12 months, followed by scale and exp
 
 | Feature | Priority | Status |
 |---------|----------|--------|
-| Chrome/Firefox extension | P0 | Planned |
-| Tauri desktop player | P0 | Planned |
+| Chrome/Firefox extension | P0 | Implemented |
+| Tauri desktop player | P0 | Implemented |
 | PaddleNLP segmentation (cloud) | P0 | Implemented |
-| Basic dictionary lookup (CC-CEDICT) | P0 | Planned |
-| One-click Anki export | P0 | Planned |
+| Basic dictionary lookup (CC-CEDICT) | P0 | Implemented |
+| One-click Anki export | P0 | Implemented |
 | User accounts + sync | P1 | Implemented |
 | Backend API (core endpoints) | P0 | Implemented |
 
@@ -44,9 +44,9 @@ Free (beta period)
 | Pre-computed simplification packs | P1 | Planned |
 | Pitch visualization (Shadowing) | P0 | Implemented |
 | Grammar explainer tooltips | P1 | Planned |
-| Mobile app (iOS + Android) | P0 | In Progress |
+| Mobile app (iOS + Android) | P0 | Implemented |
 | Hard-sub OCR (PaddleOCR) | P1 | Implemented |
-| Payment integration (Stripe) | P0 | Planned |
+| Payment integration (Janua) | P0 | Implemented |
 
 ### Milestones
 
@@ -197,25 +197,26 @@ Month 4+: Growth Phase
 
 - Backend API (Bun + Hono + Drizzle)
 - Database schema (PostgreSQL)
-- Auth system (Supabase)
+- Auth system (Janua)
 - CRDT sync engine
 - PaddleNLP segmentation service
+- CC-CEDICT dictionary service
 - Qwen3 simplification service
 - FCPE pitch detection service
 - SenseVoice ASR service
 - CosyVoice + Fish Speech TTS services
-- Mobile app foundation (Expo + React Native 0.77)
-- Desktop app foundation (Tauri 2.1)
-
-### In Progress
-
-- Mobile app UI/UX
-- Extension development
-- Payment integration
+- Mobile app (Expo + React Native 0.77)
+- Desktop app (Tauri 2.1)
+- Browser extension (Chrome/Firefox)
+- Payment integration (Stripe, Conekta, Polar via Janua)
+- Anki export (CSV, JSON, AnkiConnect, text import)
+- Docker deployment (Enclii)
+- Integration tests
 
 ### Planned
 
 - Pre-computed simplification packs
+- Grammar explainer tooltips
 - Shared decks
 - Classroom mode
 - Japanese support
