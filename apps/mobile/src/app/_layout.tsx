@@ -60,6 +60,13 @@ export default function RootLayout() {
                 presentation: 'modal',
               }}
             />
+            <Stack.Screen
+              name="shadowing"
+              options={{
+                headerShown: false,
+                presentation: 'fullScreenModal',
+              }}
+            />
           </Stack>
         </AuthProvider>
       </ThemeProvider>

@@ -5,3 +5,5 @@ export { useCards, useCardsStore, type Card, type ReviewRating } from './useCard
 export { useStats, useStatsStore, type Stats, type RecentWord } from './useStats';
 export { useSettings, useSettingsStore, type Settings } from './useSettings';
 export { useSubscription, useSubscriptionStore, type SubscriptionTier, type Subscription, type TierLimits } from './useSubscription';
+export { usePitch, type PitchContour, type ToneAnalysis, type PitchComparison } from './usePitch';
+export { useSpeech, type TranscriptionResult, type TTSSpeaker } from './useSpeech';

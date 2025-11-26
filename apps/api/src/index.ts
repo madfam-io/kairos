@@ -13,6 +13,8 @@ import { nlpRoutes } from './routes/nlp';
 import { syncRoutes } from './routes/sync';
 import { analyticsRoutes } from './routes/analytics';
 import billingRoutes from './routes/billing';
+import pitchRoutes from './routes/pitch';
+import speechRoutes from './routes/speech';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -64,6 +66,8 @@ api.route('/nlp', nlpRoutes);
 api.route('/sync', syncRoutes);
 api.route('/analytics', analyticsRoutes);
 api.route('/billing', billingRoutes);
+api.route('/pitch', pitchRoutes);
+api.route('/speech', speechRoutes);
 
 // Error handling
 app.onError(errorHandler);

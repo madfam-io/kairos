@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,20 @@ import {
   TextInput,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
-import { Search, Filter, ChevronRight } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Search, Volume2, Mic, ChevronRight } from 'lucide-react-native';
 
-import { useVocabulary } from '~/hooks/useVocabulary';
+import { useVocabulary, type VocabularyItem } from '~/hooks/useVocabulary';
+import { useSpeech } from '~/hooks/useSpeech';
 
 type StatusFilter = 'all' | 'new' | 'learning' | 'known';
 
 export default function VocabularyScreen() {
+  const router = useRouter();
   const { items, loading, refresh } = useVocabulary();
+  const { synthesize, playAudio, isPlaying, stopAudio } = useSpeech();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -45,6 +50,36 @@ export default function VocabularyScreen() {
     learning: items.filter((i) => i.status === 'learning').length,
     known: items.filter((i) => i.status === 'known').length,
   }), [items]);
+
+  const [playingWordId, setPlayingWordId] = useState<string | null>(null);
+
+  const handlePlayAudio = useCallback(async (item: VocabularyItem) => {
+    try {
+      if (playingWordId === item.id && isPlaying) {
+        await stopAudio();
+        setPlayingWordId(null);
+        return;
+      }
+
+      setPlayingWordId(item.id);
+      const audioUri = await synthesize(item.word, '中文女');
+      await playAudio(audioUri);
+      setPlayingWordId(null);
+    } catch (err) {
+      console.error('Failed to play audio:', err);
+      setPlayingWordId(null);
+    }
+  }, [playingWordId, isPlaying, synthesize, playAudio, stopAudio]);
+
+  const handlePractice = useCallback((item: VocabularyItem) => {
+    router.push({
+      pathname: '/shadowing',
+      params: {
+        word: item.word,
+        pinyin: item.pinyin || '',
+      },
+    });
+  }, [router]);
 
   return (
     <View style={styles.container}>
@@ -82,10 +117,35 @@ export default function VocabularyScreen() {
         data={filteredItems}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.wordItem} activeOpacity={0.7}>
+          <View style={styles.wordItem}>
             <View style={styles.wordMain}>
               <Text style={styles.wordText}>{item.word}</Text>
               {item.pinyin && <Text style={styles.pinyinText}>{item.pinyin}</Text>}
+              {item.definitions.length > 0 && (
+                <Text style={styles.definitionText} numberOfLines={1}>
+                  {item.definitions[0]}
+                </Text>
+              )}
+            </View>
+            <View style={styles.wordActions}>
+              {/* Audio Button */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handlePlayAudio(item)}
+              >
+                {playingWordId === item.id ? (
+                  <ActivityIndicator size="small" color="#6366f1" />
+                ) : (
+                  <Volume2 size={20} color="#6366f1" />
+                )}
+              </TouchableOpacity>
+              {/* Practice Button */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handlePractice(item)}
+              >
+                <Mic size={20} color="#22c55e" />
+              </TouchableOpacity>
             </View>
             <View style={styles.wordMeta}>
               {item.hskLevel && (
@@ -96,9 +156,8 @@ export default function VocabularyScreen() {
               <View style={[styles.statusBadge, styles[`status_${item.status}`]]}>
                 <Text style={styles.statusText}>{item.status}</Text>
               </View>
-              <ChevronRight size={20} color="#6b7280" />
             </View>
-          </TouchableOpacity>
+          </View>
         )}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -190,9 +249,28 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 2,
   },
-  wordMeta: {
+  definitionText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  wordActions: {
     flexDirection: 'row',
+    marginRight: 12,
+    gap: 8,
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wordMeta: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
   },
   hskBadge: {
     backgroundColor: '#6366f1',
