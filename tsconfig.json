@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@kairos/types": ["packages/types/src"],
+      "@kairos/utils": ["packages/utils/src"],
+      "@kairos/ui": ["packages/ui/src"],
+      "@kairos/core": ["packages/core/src"],
+      "@kairos/api-client": ["packages/api-client/src"]
+    }
+  },
+  "include": [],
+  "references": [
+    { "path": "apps/extension" },
+    { "path": "apps/desktop" },
+    { "path": "apps/api" },
+    { "path": "apps/mobile" },
+    { "path": "packages/types" },
+    { "path": "packages/utils" },
+    { "path": "packages/ui" },
+    { "path": "packages/core" },
+    { "path": "packages/api-client" }
+  ]
+}
