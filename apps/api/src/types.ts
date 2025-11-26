@@ -2,12 +2,22 @@ import type { Context } from 'hono';
 import type { User } from '@kairos/types';
 
 /**
+ * Organization context for enterprise features
+ */
+export interface OrgContext {
+  organizationId: string;
+  role: 'owner' | 'admin' | 'instructor' | 'member';
+  organizationName?: string;
+}
+
+/**
  * Environment bindings for Hono app
  */
 export interface AppEnv {
   Variables: {
     user: User | null;
     requestId: string;
+    orgContext?: OrgContext;
   };
   Bindings: {
     SUPABASE_URL: string;

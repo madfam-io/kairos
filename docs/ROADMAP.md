@@ -97,7 +97,7 @@ Free (beta period)
 |---------|----------|--------|
 | Japanese language support | P1 | Implemented |
 | Advanced analytics dashboard | P2 | Implemented |
-| Enterprise/institutional tier | P2 | Planned |
+| Enterprise/institutional tier | P2 | Implemented |
 | Native Windows/Mac apps | P1 | Implemented |
 | Offline mode (full) | P1 | Implemented |
 
@@ -239,9 +239,20 @@ Month 4+: Growth Phase
 - Learning goals and milestones
 - AI-generated learning insights and recommendations
 
+**Enterprise/Institutional:**
+- Organization management (universities, schools, companies)
+- Multi-tier role system (owner, admin, instructor, member)
+- Department/course hierarchy
+- Bulk user provisioning (CSV import, invitations)
+- Private content libraries (organization-only decks)
+- SSO integration support (SAML/OIDC)
+- Organization-wide analytics dashboard
+- Seat-based licensing with volume pricing
+- Comprehensive audit logging
+- License management and history
+
 ### Planned
 
-- Enterprise/institutional tier
 - Third-party API integrations
 
 ---

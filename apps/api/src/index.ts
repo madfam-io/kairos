@@ -21,6 +21,7 @@ import { referralsRoutes } from './routes/referrals';
 import { simplificationPacksRoutes } from './routes/simplification-packs';
 import { classroomRoutes } from './routes/classroom';
 import { offlineRoutes } from './routes/offline';
+import { enterpriseRoutes } from './routes/enterprise';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -80,6 +81,7 @@ api.route('/referrals', referralsRoutes);
 api.route('/packs', simplificationPacksRoutes);
 api.route('/classroom', classroomRoutes);
 api.route('/offline', offlineRoutes);
+api.route('/enterprise', enterpriseRoutes);
 
 // Error handling
 app.onError(errorHandler);
