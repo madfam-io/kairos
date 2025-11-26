@@ -1,0 +1,699 @@
+openapi: 3.1.0
+info:
+  title: Kairos API
+  description: |
+    API for Kairos - Chinese/Japanese immersion learning platform.
+
+    ## Authentication
+    Most endpoints require a Bearer token in the Authorization header:
+    ```
+    Authorization: Bearer <jwt_token>
+    ```
+
+    ## Rate Limiting
+    API requests are rate limited. Check response headers:
+    - `X-RateLimit-Limit`: Maximum requests per window
+    - `X-RateLimit-Remaining`: Requests remaining
+    - `X-RateLimit-Reset`: Window reset time (ISO 8601)
+
+    ## Errors
+    All errors return a consistent format:
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human readable message"
+      },
+      "meta": {
+        "requestId": "uuid"
+      }
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: Kairos Support
+    email: support@kairos.dev
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.kairos.dev/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Development
+
+tags:
+  - name: Health
+    description: Health and observability endpoints
+  - name: Auth
+    description: Authentication and session management
+  - name: Cards
+    description: Vocabulary card management
+  - name: Vocabulary
+    description: Vocabulary list operations
+  - name: Analytics
+    description: Learning analytics and progress tracking
+  - name: NLP
+    description: Natural Language Processing services
+  - name: Speech
+    description: Text-to-speech and speech recognition
+  - name: Billing
+    description: Subscription and payment management
+  - name: Enterprise
+    description: Organization and team management
+
+paths:
+  # Health Endpoints
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Basic liveness probe
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Checks database connectivity
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Service not ready
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Metrics in Prometheus exposition format
+      operationId: getMetrics
+      security: []
+      responses:
+        '200':
+          description: Metrics in text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  # Auth Endpoints
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with credentials
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # Cards Endpoints
+  /cards:
+    get:
+      tags: [Cards]
+      summary: Get all cards
+      operationId: getCards
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, nextReview, word]
+            default: createdAt
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Cards]
+      summary: Create a new card
+      operationId: createCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cards/due:
+    get:
+      tags: [Cards]
+      summary: Get cards due for review
+      operationId: getDueCards
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Due cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cards/{cardId}/review:
+    post:
+      tags: [Cards]
+      summary: Submit card review
+      operationId: reviewCard
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        '200':
+          description: Review recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Analytics Endpoints
+  /analytics/dashboard:
+    get:
+      tags: [Analytics]
+      summary: Get dashboard summary
+      operationId: getDashboard
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+
+  /analytics/progress:
+    get:
+      tags: [Analytics]
+      summary: Get progress over time
+      operationId: getProgress
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, year]
+            default: month
+      responses:
+        '200':
+          description: Progress data
+
+  # NLP Endpoints
+  /nlp/segment:
+    post:
+      tags: [NLP]
+      summary: Segment Chinese text
+      operationId: segmentText
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SegmentRequest'
+      responses:
+        '200':
+          description: Segmented text
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentResponse'
+
+  /nlp/simplify:
+    post:
+      tags: [NLP]
+      summary: Simplify text to target level
+      operationId: simplifyText
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimplifyRequest'
+      responses:
+        '200':
+          description: Simplified text
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimplifyResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Health Schemas
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        environment:
+          type: string
+
+    ReadyResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, failed]
+
+    # Auth Schemas
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+          minLength: 2
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            token:
+              type: string
+
+    # User Schema
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        tier:
+          type: string
+          enum: [free, learner, immersion]
+        createdAt:
+          type: string
+          format: date-time
+
+    # Card Schemas
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        word:
+          type: string
+        sentence:
+          type: string
+        pinyin:
+          type: string
+        definitions:
+          type: array
+          items:
+            type: string
+        hskLevel:
+          type: integer
+          minimum: 1
+          maximum: 9
+        nextReview:
+          type: string
+          format: date-time
+        interval:
+          type: integer
+        easeFactor:
+          type: number
+        reviewCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateCardRequest:
+      type: object
+      required: [word, sentence]
+      properties:
+        word:
+          type: string
+          minLength: 1
+        sentence:
+          type: string
+          minLength: 1
+        pinyin:
+          type: string
+        definitions:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+        sourceUrl:
+          type: string
+          format: uri
+
+    CardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Card'
+
+    CardsListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            cards:
+              type: array
+              items:
+                $ref: '#/components/schemas/Card'
+            total:
+              type: integer
+            hasMore:
+              type: boolean
+
+    ReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: '1=Again, 2=Hard, 3=Good, 4=Easy'
+        reviewTime:
+          type: integer
+          description: Time spent reviewing in milliseconds
+
+    # Dashboard Schemas
+    DashboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            today:
+              type: object
+              properties:
+                cardsReviewed:
+                  type: integer
+                cardsLearned:
+                  type: integer
+                timeSpent:
+                  type: integer
+            streak:
+              type: object
+              properties:
+                current:
+                  type: integer
+                longest:
+                  type: integer
+            vocabulary:
+              type: object
+              properties:
+                total:
+                  type: integer
+                byHsk:
+                  type: object
+
+    # NLP Schemas
+    SegmentRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 10000
+        language:
+          type: string
+          enum: [zh, ja]
+          default: zh
+
+    SegmentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            segments:
+              type: array
+              items:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  pinyin:
+                    type: string
+                  definitions:
+                    type: array
+                    items:
+                      type: string
+
+    SimplifyRequest:
+      type: object
+      required: [text, targetLevel]
+      properties:
+        text:
+          type: string
+          maxLength: 5000
+        targetLevel:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: Target HSK level
+
+    SimplifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            original:
+              type: string
+            simplified:
+              type: string
+            changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  original:
+                    type: string
+                  simplified:
+                    type: string
+                  reason:
+                    type: string
+
+    # Error Schema
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+security:
+  - BearerAuth: []
