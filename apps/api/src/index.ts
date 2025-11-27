@@ -41,6 +41,11 @@ import { enterpriseRoutes } from './routes/enterprise';
 import { developerRoutes } from './routes/developer';
 import { ltiRoutes } from './routes/lti';
 import { docsRoutes } from './routes/docs';
+import { onboardingRoutes } from './routes/onboarding';
+import { reviewRoutes } from './routes/review';
+import { gamificationRoutes } from './routes/gamification';
+import { progressRoutes } from './routes/progress';
+import { discoveryRoutes } from './routes/discovery';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter, strictRateLimiter } from './middleware/rate-limiter';
 import {
@@ -209,6 +214,11 @@ api.route('/offline', offlineRoutes);
 api.route('/enterprise', enterpriseRoutes);
 api.route('/developer', developerRoutes);
 api.route('/lti', ltiRoutes);
+api.route('/onboarding', onboardingRoutes);
+api.route('/review', reviewRoutes);
+api.route('/gamification', gamificationRoutes);
+api.route('/progress', progressRoutes);
+api.route('/discovery', discoveryRoutes);
 
 // Error handling
 app.onError(errorHandler);

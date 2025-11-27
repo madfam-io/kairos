@@ -126,3 +126,84 @@ export {
   externalIntegrations,
   externalIntegrationsRelations,
 } from './integrations';
+
+// Onboarding tables
+export {
+  ONBOARDING_STEPS,
+  userOnboarding,
+  hskAssessment,
+  learningPreferences,
+  recommendedContent,
+  onboardingEvents,
+  userOnboardingRelations,
+  hskAssessmentRelations,
+  learningPreferencesRelations,
+  recommendedContentRelations,
+  onboardingEventsRelations,
+} from './onboarding';
+export type { OnboardingStep } from './onboarding';
+
+// Review tables (active recall variations)
+export {
+  CARD_TYPES,
+  REVIEW_MODES,
+  reviewPreferences,
+  reviewCards,
+  reviewSessionsV2,
+  reviewResponses,
+  clozeSentences,
+  cardTypePerformance,
+  reviewPreferencesRelations,
+  reviewCardsRelations,
+  reviewSessionsV2Relations,
+  reviewResponsesRelations,
+  clozeSentencesRelations,
+  cardTypePerformanceRelations,
+} from './review';
+export type { CardType, ReviewMode } from './review';
+
+// Gamification tables
+export {
+  achievementDefinitions,
+  userAchievements,
+  userXp,
+  xpTransactions,
+  challengeDefinitions,
+  userChallenges,
+  studyGroups,
+  studyGroupMembers,
+  leaderboardEntries,
+  userFollows,
+  activityFeed,
+  activityLikes,
+  dailyGoals,
+  achievementDefinitionsRelations,
+  userAchievementsRelations,
+  userXpRelations,
+  xpTransactionsRelations,
+  challengeDefinitionsRelations,
+  userChallengesRelations,
+  studyGroupsRelations,
+  studyGroupMembersRelations,
+  leaderboardEntriesRelations,
+  userFollowsRelations,
+  activityFeedRelations,
+  activityLikesRelations,
+  dailyGoalsRelations,
+} from './gamification';
+
+// Discovery tables (content discovery and comprehensibility)
+export {
+  contentCatalog,
+  contentTopics,
+  userContentInteractions,
+  userTopicPreferences,
+  contentVocabulary,
+  searchHistory,
+  contentCatalogRelations,
+  contentTopicsRelations,
+  userContentInteractionsRelations,
+  userTopicPreferencesRelations,
+  contentVocabularyRelations,
+  searchHistoryRelations,
+} from './discovery';
