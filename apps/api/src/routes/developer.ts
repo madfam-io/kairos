@@ -41,7 +41,7 @@ import {
   type ApiScope,
   type WebhookEvent,
   type ExternalProvider,
-} from '../services/api-integration';
+} from '../services/developer';
 
 export const developerRoutes = new Hono<AppEnv>();
 
