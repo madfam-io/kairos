@@ -34,6 +34,7 @@ import { offlineRoutes } from './routes/offline';
 import { enterpriseRoutes } from './routes/enterprise';
 import { developerRoutes } from './routes/developer';
 import { ltiRoutes } from './routes/lti';
+import { docsRoutes } from './routes/docs';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter } from './middleware/rate-limiter';
 import type { AppEnv } from './types';
@@ -117,6 +118,9 @@ app.get('/metrics', (c) => {
 app.get('/metrics/json', (c) => {
   return c.json(getMetricsJson());
 });
+
+// API Documentation (Swagger UI and ReDoc)
+app.route('/docs', docsRoutes);
 
 // Readiness probe (checks database connectivity)
 app.get('/ready', async (c) => {
