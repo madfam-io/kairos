@@ -2,8 +2,8 @@
 
 | **Document Name** | Kairos PRD: Next-Gen Chinese Immersion |
 | :--- | :--- |
-| **Version** | 2.0 |
-| **Status** | Planning Phase |
+| **Version** | 2.1 |
+| **Status** | Production Ready |
 | **Strategic Position** | **"The Chinese-First Comprehension Engine"**<br>Moving beyond simple dictionaries to AI-driven content adaptation and tone mastery, with superior Chinese NLP and sustainable unit economics via open-source AI. |
 
 -----
@@ -24,7 +24,7 @@ The goal is not to be cheaper—it's to be *definitively better* for Chinese lea
 ### 1.2 Core Differentiators
 
 1.  **Chinese-First Architecture:** Abandoning generic "polyglot" libraries for **PaddleNLP** and **PaddleOCR**, ensuring 99% accuracy in Chinese segmentation and hard-sub recognition (solving the #1 user complaint).
-2.  **The "i+1" Generator (AI Simplification):** Using **open-source LLMs** (Qwen2.5, DeepSeek) to rewrite complex C-Drama subtitles into HSK 3/4/5 vocabulary while retaining the original meaning. Self-hosted inference ensures sustainable unit economics.
+2.  **The "i+1" Generator (AI Simplification):** Using **open-source LLMs** (Qwen3-30B-A3B via vLLM) to rewrite complex C-Drama subtitles into HSK 3/4/5 vocabulary while retaining the original meaning. Self-hosted inference ensures sustainable unit economics.
 3.  **Visual Tone Feedback:** A "Shadowing Mode" that visualizes the user's pitch contour overlaying the native speaker's audio in real-time, addressing the specific needs of tonal language learners.
 4.  **Platform Resilience:** Standalone local video player as the reliable core, with browser extensions as convenience layers that can break without killing the product.
 5.  **Mobile-First Review:** Companion app for reviewing mined content, ensuring learning continues away from the desktop.
@@ -75,14 +75,14 @@ Proprietary LLM APIs (Claude, GPT-4) cost $3-15 per 1M tokens. At scale, this de
 
 | Use Case | Model | Why |
 | :--- | :--- | :--- |
-| Subtitle simplification | **Qwen2.5-7B-Instruct** | Best Chinese performance at 7B scale, Apache 2.0 license |
-| Grammar explanation | **Qwen2.5-14B-Instruct** | More nuanced for linguistic explanations |
-| Fallback/complex | **DeepSeek-V2-Lite** | Cost-efficient MoE architecture for edge cases |
+| Subtitle simplification | **Qwen3-30B-A3B** | Best Chinese performance, MoE architecture, Apache 2.0 license |
+| Grammar explanation | **Qwen3-30B-A3B** | Nuanced linguistic explanations |
+| Fallback/complex | **Qwen3-30B-A3B** | Unified model for consistency |
 
-**Inference cost estimate (self-hosted on RunPod/Modal):**
-- Qwen2.5-7B: ~$0.10 per 1M tokens (vs $3+ for Claude Haiku)
-- 500 sentences/user/month ≈ 50K tokens ≈ $0.005/user/month
-- At 10K users: $50/month for simplification inference (vs $500+ with proprietary APIs)
+**Inference cost estimate (self-hosted via Docker/Enclii):**
+- Qwen3-30B-A3B: ~$0.0004/request (vs $0.01+ for proprietary APIs)
+- 500 sentences/user/month ≈ $0.20/user/month
+- At 10K users: $2,000/month for simplification inference (vs $50,000+ with proprietary APIs)
 
 -----
 
@@ -300,13 +300,13 @@ The core interface is **multi-modal**: a standalone desktop player (primary), br
 | **Mobile App** | React Native | Code sharing with web, mature ecosystem |
 | **API Gateway** | Cloudflare Workers | Global edge, DDoS protection, <50ms latency worldwide |
 | **Core API** | Hono + Bun | Fast, TypeScript-native, edge-compatible |
-| **Auth** | Supabase Auth | Managed auth with OAuth, JWT, row-level security |
-| **Database** | Supabase PostgreSQL | Managed Postgres with realtime subscriptions |
+| **Auth** | Janua SSO | Unified auth/billing with OAuth, JWT, JWKS verification |
+| **Database** | PostgreSQL (Enclii) | Managed Postgres with connection pooling |
 | **Cache** | Upstash Redis | Serverless Redis, pay-per-request |
 | **Segmentation** | PaddleNLP (Modal serverless) | Best-in-class Chinese NER |
 | **OCR** | PaddleOCR (ONNX in-browser + Modal fallback) | Superior Chinese character recognition |
 | **Pitch Detection** | TensorFlow.js (SPICE) | Client-side pitch extraction |
-| **LLM Inference** | Modal (Qwen2.5, DeepSeek) | Serverless GPU, pay-per-second, auto-scaling |
+| **LLM Inference** | Docker/Enclii (Qwen3-30B-A3B) | Self-hosted GPU, vLLM for efficiency |
 
 ### 6.3 Inference Infrastructure (Open Source Models)
 
@@ -314,9 +314,7 @@ The core interface is **multi-modal**: a standalone desktop player (primary), br
 
 | Model | GPU | Cost/hr | Tokens/sec | Use Case |
 | :--- | :--- | :--- | :--- | :--- |
-| Qwen2.5-7B-Instruct | A10G | $0.76 | ~150 | Subtitle simplification (primary) |
-| Qwen2.5-14B-Instruct | A100-40G | $2.78 | ~100 | Grammar explanations |
-| DeepSeek-V2-Lite | A10G | $0.76 | ~120 | Complex/fallback cases |
+| Qwen3-30B-A3B | A10G | $0.76 | ~150 | All simplification and grammar |
 
 **Scaling strategy:**
 - Cold start mitigation: Keep 1 warm instance during peak hours (8am-11pm user timezone)
@@ -331,19 +329,19 @@ The core interface is **multi-modal**: a standalone desktop player (primary), br
 
 ### 6.4 Backend Services Detail
 
-#### 6.4.1 Auth Service (Supabase)
+#### 6.4.1 Auth Service (Janua)
 
 ```typescript
 // Auth flows supported:
 - Email/password registration
 - Google OAuth
-- Apple OAuth (required for iOS)
-- Magic link (passwordless)
+- GitHub OAuth
+- Microsoft OAuth
 
 // Session management:
 - JWT tokens (15min access, 7day refresh)
-- Row-level security policies in PostgreSQL
-- Device tracking for "logged in devices" UI
+- JWKS-based token verification
+- Role-based access (subscriber:learner, subscriber:immersion)
 ```
 
 #### 6.4.2 Core API Endpoints

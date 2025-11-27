@@ -19,7 +19,7 @@ Kairos helps learners acquire Chinese through immersive content consumption. Wat
 ## Features
 
 - **Neural Segmentation**: PaddleNLP LAC for accurate word boundaries
-- **AI Simplification**: Qwen2.5-7B rewrites sentences to HSK 3/4/5/6 levels
+- **AI Simplification**: Qwen3-30B-A3B rewrites sentences to HSK 3/4/5/6 levels
 - **Pitch Visualization**: FCPE-powered tone analysis for shadowing practice
 - **Sentence Mining**: One-click vocabulary cards with audio and screenshots
 - **Cross-platform Sync**: CRDT-based offline-first synchronization
