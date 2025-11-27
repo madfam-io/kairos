@@ -13,6 +13,8 @@ import {
   cardsToAnkiImport,
   enrichCardsWithDictionary,
 } from '../services/anki';
+import { uploadCardAudio, uploadCardScreenshot } from '../services/storage';
+import { log } from '../lib/logger';
 import type { Card } from '@kairos/types';
 
 export const cardsRoutes = new Hono<AuthenticatedEnv>();
@@ -481,25 +483,47 @@ cardsRoutes.post('/:id/upload-audio', async (c) => {
     }, 400);
   }
 
-  // TODO: Upload to storage (S3, R2, etc.)
-  // For now, store as base64 data URL for simplicity
-  const audioBuffer = await audioFile.arrayBuffer();
-  const base64 = Buffer.from(audioBuffer).toString('base64');
-  const audioUrl = `data:${audioFile.type};base64,${base64}`;
+  try {
+    // Upload to storage (Supabase or fallback to base64)
+    const uploadResult = await uploadCardAudio(audioFile, user.id, id);
 
-  // Update card
-  const [updatedCard] = await db
-    .update(cardsTable)
-    .set({ audioUrl })
-    .where(eq(cardsTable.id, id))
-    .returning();
+    log.info('Audio uploaded for card', {
+      userId: user.id,
+      cardId: id,
+      size: uploadResult.size,
+      isDataUrl: uploadResult.isDataUrl,
+    });
 
-  return c.json({
-    success: true,
-    data: {
-      audioUrl: updatedCard.audioUrl,
-    },
-  });
+    // Update card with audio URL
+    const [updatedCard] = await db
+      .update(cardsTable)
+      .set({ audioUrl: uploadResult.url })
+      .where(eq(cardsTable.id, id))
+      .returning();
+
+    return c.json({
+      success: true,
+      data: {
+        audioUrl: updatedCard.audioUrl,
+        size: uploadResult.size,
+        mimeType: uploadResult.mimeType,
+        storageType: uploadResult.isDataUrl ? 'base64' : 'cloud',
+      },
+    });
+  } catch (error) {
+    log.error('Audio upload failed', error instanceof Error ? error : new Error(String(error)), {
+      userId: user.id,
+      cardId: id,
+    });
+
+    return c.json({
+      success: false,
+      error: {
+        code: 'UPLOAD_FAILED',
+        message: error instanceof Error ? error.message : 'Upload failed',
+      },
+    }, 400);
+  }
 });
 
 /**
@@ -533,25 +557,47 @@ cardsRoutes.post('/:id/upload-screenshot', async (c) => {
     }, 400);
   }
 
-  // TODO: Upload to storage (S3, R2, etc.)
-  // For now, store as base64 data URL for simplicity
-  const imageBuffer = await screenshotFile.arrayBuffer();
-  const base64 = Buffer.from(imageBuffer).toString('base64');
-  const screenshotUrl = `data:${screenshotFile.type};base64,${base64}`;
+  try {
+    // Upload to storage (Supabase or fallback to base64)
+    const uploadResult = await uploadCardScreenshot(screenshotFile, user.id, id);
 
-  // Update card
-  const [updatedCard] = await db
-    .update(cardsTable)
-    .set({ screenshotUrl })
-    .where(eq(cardsTable.id, id))
-    .returning();
+    log.info('Screenshot uploaded for card', {
+      userId: user.id,
+      cardId: id,
+      size: uploadResult.size,
+      isDataUrl: uploadResult.isDataUrl,
+    });
 
-  return c.json({
-    success: true,
-    data: {
-      screenshotUrl: updatedCard.screenshotUrl,
-    },
-  });
+    // Update card with screenshot URL
+    const [updatedCard] = await db
+      .update(cardsTable)
+      .set({ screenshotUrl: uploadResult.url })
+      .where(eq(cardsTable.id, id))
+      .returning();
+
+    return c.json({
+      success: true,
+      data: {
+        screenshotUrl: updatedCard.screenshotUrl,
+        size: uploadResult.size,
+        mimeType: uploadResult.mimeType,
+        storageType: uploadResult.isDataUrl ? 'base64' : 'cloud',
+      },
+    });
+  } catch (error) {
+    log.error('Screenshot upload failed', error instanceof Error ? error : new Error(String(error)), {
+      userId: user.id,
+      cardId: id,
+    });
+
+    return c.json({
+      success: false,
+      error: {
+        code: 'UPLOAD_FAILED',
+        message: error instanceof Error ? error.message : 'Upload failed',
+      },
+    }, 400);
+  }
 });
 
 /**

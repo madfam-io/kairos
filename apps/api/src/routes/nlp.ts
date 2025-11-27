@@ -5,6 +5,8 @@ import type { AppEnv, AuthenticatedEnv } from '../types';
 import { requireAuth, requireSubscription, optionalAuth } from '../middleware/auth';
 import { AppError } from '../middleware/error-handler';
 import { getNLPClient } from '../services/nlp-client';
+import { getSimplifyClient } from '../services/simplify-client';
+import { log } from '../lib/logger';
 import {
   findGrammarInText,
   getGrammarExplanation,
@@ -137,22 +139,54 @@ nlpRoutes.post(
     const user = c.get('user');
     const startTime = Date.now();
 
-    // TODO: Check monthly quota
-    // TODO: Check cache first
-    // TODO: Call Qwen2.5-7B on Modal
-
-    // Placeholder response
-    return c.json({
-      success: true,
-      data: {
-        originalText: text,
-        simplifiedText: text, // TODO: Actual simplification
+    try {
+      const simplifyClient = getSimplifyClient();
+      const result = await simplifyClient.simplify(text, {
         targetLevel,
-        confidence: 0.95,
-        cached: false,
-        processingTimeMs: Date.now() - startTime,
-      },
-    });
+        preserveNames: preserveProperNouns,
+        context,
+      });
+
+      log.info('Text simplified', {
+        userId: user.id,
+        targetLevel,
+        cached: result.cached,
+        tokensUsed: result.tokensUsed,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          originalText: result.original,
+          simplifiedText: result.simplified,
+          targetLevel: result.targetLevel,
+          confidence: result.confidence,
+          cached: result.cached,
+          processingTimeMs: Date.now() - startTime,
+        },
+      });
+    } catch (error) {
+      log.error('Simplification failed', error instanceof Error ? error : new Error(String(error)), {
+        userId: user.id,
+        textLength: text.length,
+        targetLevel,
+      });
+
+      // Return original text if service is unavailable
+      return c.json({
+        success: true,
+        data: {
+          originalText: text,
+          simplifiedText: text,
+          targetLevel,
+          confidence: 0,
+          cached: false,
+          processingTimeMs: Date.now() - startTime,
+          fallback: true,
+          error: 'Simplification service temporarily unavailable',
+        },
+      });
+    }
   }
 );
 
@@ -170,20 +204,69 @@ nlpRoutes.post(
     const user = c.get('user');
     const startTime = Date.now();
 
-    // TODO: Batch processing with caching
-    const results = sentences.map((s) => ({
-      index: s.index,
-      originalText: s.text,
-      simplifiedText: s.text, // TODO: Actual simplification
-    }));
+    try {
+      const simplifyClient = getSimplifyClient();
+      const texts = sentences.map((s) => s.text);
 
-    return c.json({
-      success: true,
-      data: {
-        results,
-        totalProcessingTimeMs: Date.now() - startTime,
-      },
-    });
+      const batchResult = await simplifyClient.simplifyBatch(texts, {
+        targetLevel,
+        preserveNames: true,
+      });
+
+      // Map results back with original indices
+      const results = sentences.map((s, i) => ({
+        index: s.index,
+        originalText: batchResult.results[i].original,
+        simplifiedText: batchResult.results[i].simplified,
+        confidence: batchResult.results[i].confidence,
+        cached: batchResult.results[i].cached,
+      }));
+
+      log.info('Batch simplification completed', {
+        userId: user.id,
+        sentenceCount: sentences.length,
+        targetLevel,
+        totalTokens: batchResult.totalTokens,
+        cacheHits: batchResult.cacheHits,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          results,
+          totalProcessingTimeMs: Date.now() - startTime,
+          totalTokens: batchResult.totalTokens,
+          cacheHits: batchResult.cacheHits,
+        },
+      });
+    } catch (error) {
+      log.error('Batch simplification failed', error instanceof Error ? error : new Error(String(error)), {
+        userId: user.id,
+        sentenceCount: sentences.length,
+        targetLevel,
+      });
+
+      // Fallback: return original texts
+      const results = sentences.map((s) => ({
+        index: s.index,
+        originalText: s.text,
+        simplifiedText: s.text,
+        confidence: 0,
+        cached: false,
+      }));
+
+      return c.json({
+        success: true,
+        data: {
+          results,
+          totalProcessingTimeMs: Date.now() - startTime,
+          totalTokens: 0,
+          cacheHits: 0,
+          fallback: true,
+          error: 'Simplification service temporarily unavailable',
+        },
+      });
+    }
   }
 );
 
