@@ -59,7 +59,7 @@ async function requireOrgAccess(
   const role = await getUserOrgRole(userId, orgId);
 
   if (!role) {
-    throw new AppError('Not a member of this organization', 403);
+    throw new AppError('FORBIDDEN', 'Not a member of this organization', 403);
   }
 
   if (requiredPermission) {
@@ -83,7 +83,7 @@ async function requireOrgAccess(
     }
 
     if (!hasPermission) {
-      throw new AppError('Insufficient permissions', 403);
+      throw new AppError('FORBIDDEN', 'Insufficient permissions', 403);
     }
   }
 
@@ -191,7 +191,7 @@ enterpriseRoutes.get('/organizations/:orgId', async (c) => {
   const org = await getOrganization(orgId);
 
   if (!org) {
-    throw new AppError('Organization not found', 404);
+    throw new AppError('NOT_FOUND', 'Organization not found', 404);
   }
 
   return c.json({
@@ -220,7 +220,7 @@ enterpriseRoutes.patch(
     const org = await updateOrganization(orgId, user.id, updates);
 
     if (!org) {
-      throw new AppError('Organization not found', 404);
+      throw new AppError('NOT_FOUND', 'Organization not found', 404);
     }
 
     return c.json({
@@ -239,7 +239,7 @@ enterpriseRoutes.get('/organizations/by-slug/:slug', async (c) => {
   const org = await getOrganizationBySlug(slug);
 
   if (!org || !org.isActive) {
-    throw new AppError('Organization not found', 404);
+    throw new AppError('NOT_FOUND', 'Organization not found', 404);
   }
 
   // Return limited public info
@@ -303,7 +303,7 @@ enterpriseRoutes.post('/organizations/:orgId/members/:userId', async (c) => {
   const result = await addOrgMember(orgId, targetUserId, user.id);
 
   if (!result.success) {
-    throw new AppError(result.error!, 400);
+    throw new AppError('BAD_REQUEST', result.error || 'Failed to add member', 400);
   }
 
   return c.json({
@@ -330,7 +330,7 @@ enterpriseRoutes.patch(
     const result = await updateMemberRole(orgId, targetUserId, user.id, newRole);
 
     if (!result.success) {
-      throw new AppError(result.error!, 400);
+      throw new AppError('BAD_REQUEST', result.error || 'Failed to update member role', 400);
     }
 
     return c.json({
@@ -354,7 +354,7 @@ enterpriseRoutes.delete('/organizations/:orgId/members/:userId', async (c) => {
   const result = await removeOrgMember(orgId, targetUserId, user.id);
 
   if (!result.success) {
-    throw new AppError(result.error!, 400);
+    throw new AppError('BAD_REQUEST', result.error || 'Failed to remove member', 400);
   }
 
   return c.json({
@@ -453,7 +453,7 @@ enterpriseRoutes.post('/invites/:token/accept', async (c) => {
   const result = await acceptInvite(token, user.id);
 
   if (!result.success) {
-    throw new AppError(result.error!, 400);
+    throw new AppError('BAD_REQUEST', result.error || 'Failed to accept invite', 400);
   }
 
   return c.json({
@@ -546,7 +546,7 @@ enterpriseRoutes.patch(
     const dept = await updateDepartment(orgId, deptId, user.id, updates);
 
     if (!dept) {
-      throw new AppError('Department not found', 404);
+      throw new AppError('NOT_FOUND', 'Department not found', 404);
     }
 
     return c.json({
@@ -615,7 +615,7 @@ enterpriseRoutes.post(
     const result = await addOrgDeck(orgId, deckId, user.id, { departmentId, isRequired });
 
     if (!result.success) {
-      throw new AppError(result.error!, 400);
+      throw new AppError('BAD_REQUEST', result.error || 'Failed to add deck', 400);
     }
 
     return c.json({
@@ -716,7 +716,7 @@ enterpriseRoutes.get('/organizations/:orgId/license', async (c) => {
   const org = await getOrganization(orgId);
 
   if (!org) {
-    throw new AppError('Organization not found', 404);
+    throw new AppError('NOT_FOUND', 'Organization not found', 404);
   }
 
   return c.json({
@@ -760,7 +760,7 @@ enterpriseRoutes.patch(
     });
 
     if (!result.success) {
-      throw new AppError(result.error!, 400);
+      throw new AppError('BAD_REQUEST', result.error || 'Failed to update license', 400);
     }
 
     return c.json({

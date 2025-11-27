@@ -56,6 +56,11 @@ const envSchema = z.object({
   // Security
   API_SECRET: z.string().min(16).optional(),
   CORS_ORIGINS: z.string().optional(),
+
+  // LTI 1.3 (optional, for key management)
+  LTI_PRIVATE_KEY: z.string().optional(),
+  LTI_PUBLIC_KEY: z.string().optional(),
+  LTI_KEY_ID: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -124,9 +129,19 @@ export const features = {
     return !!env.STRIPE_SECRET_KEY;
   },
 
+  hasSupabase: () => {
+    const env = getEnv();
+    return !!(env.SUPABASE_URL && env.SUPABASE_ANON_KEY);
+  },
+
   hasAIServices: () => {
     const env = getEnv();
     return !!(env.NLP_SERVICE_URL || env.MODAL_TOKEN_ID);
+  },
+
+  hasLTIKeys: () => {
+    const env = getEnv();
+    return !!(env.LTI_PRIVATE_KEY && env.LTI_PUBLIC_KEY);
   },
 
   isProduction: () => {

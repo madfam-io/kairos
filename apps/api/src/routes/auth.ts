@@ -4,8 +4,19 @@ import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import type { AppEnv } from '../types';
 import { AppError } from '../middleware/error-handler';
+import { strictRateLimiter } from '../middleware/rate-limiter';
+import { getEnv } from '../lib/env';
 
 export const authRoutes = new Hono<AppEnv>();
+
+// Helper to get Supabase client with validated env vars
+function getSupabaseClient() {
+  const env = getEnv();
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    throw new AppError('CONFIG_ERROR', 'Supabase credentials not configured', 500);
+  }
+  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+}
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -24,11 +35,12 @@ const refreshSchema = z.object({
 
 /**
  * POST /api/v1/auth/register
+ * Rate limited to prevent abuse
  */
-authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
+authRoutes.post('/register', strictRateLimiter(), zValidator('json', registerSchema), async (c) => {
   const { email, password, displayName } = c.req.valid('json');
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+  const supabase = getSupabaseClient();
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -73,11 +85,12 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
 
 /**
  * POST /api/v1/auth/login
+ * Strict rate limiting to prevent brute force attacks
  */
-authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
+authRoutes.post('/login', strictRateLimiter(), zValidator('json', loginSchema), async (c) => {
   const { email, password } = c.req.valid('json');
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+  const supabase = getSupabaseClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -108,7 +121,7 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
 authRoutes.post('/refresh', zValidator('json', refreshSchema), async (c) => {
   const { refreshToken } = c.req.valid('json');
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+  const supabase = getSupabaseClient();
 
   const { data, error } = await supabase.auth.refreshSession({
     refresh_token: refreshToken,
@@ -135,7 +148,7 @@ authRoutes.post('/logout', async (c) => {
   const authHeader = c.req.header('Authorization');
 
   if (authHeader?.startsWith('Bearer ')) {
-    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
   }
 
@@ -147,17 +160,21 @@ authRoutes.post('/logout', async (c) => {
 
 /**
  * POST /api/v1/auth/forgot-password
+ * Rate limited to prevent email enumeration attacks
  */
 authRoutes.post(
   '/forgot-password',
+  strictRateLimiter(),
   zValidator('json', z.object({ email: z.string().email() })),
   async (c) => {
     const { email } = c.req.valid('json');
+    const env = getEnv();
 
-    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY);
+    const supabase = getSupabaseClient();
+    const appUrl = env.APP_URL || 'https://app.kairos.dev';
 
     await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://app.kairos.dev/reset-password',
+      redirectTo: `${appUrl}/reset-password`,
     });
 
     // Always return success to prevent email enumeration
