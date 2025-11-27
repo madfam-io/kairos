@@ -36,7 +36,13 @@ import { developerRoutes } from './routes/developer';
 import { ltiRoutes } from './routes/lti';
 import { docsRoutes } from './routes/docs';
 import { errorHandler } from './middleware/error-handler';
-import { rateLimiter } from './middleware/rate-limiter';
+import { rateLimiter, strictRateLimiter } from './middleware/rate-limiter';
+import {
+  ipBlocker,
+  inputValidation,
+  additionalSecurityHeaders,
+  validateRequestId,
+} from './middleware/security';
 import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
@@ -49,6 +55,12 @@ app.use('*', async (c, next) => {
   c.header('X-Request-Id', requestId);
   await next();
 });
+
+// Security: Validate request ID format
+app.use('*', validateRequestId());
+
+// Security: Block known bad IPs
+app.use('*', ipBlocker());
 
 // Metrics collection (early in middleware chain)
 app.use('*', metricsMiddleware());
@@ -71,6 +83,7 @@ app.use('*', async (c, next) => {
 // Global middleware
 app.use('*', timing());
 app.use('*', secureHeaders());
+app.use('*', additionalSecurityHeaders());
 app.use('*', prettyJSON());
 
 // CORS configuration
@@ -97,6 +110,13 @@ app.use(
 
 // Rate limiting
 app.use('/api/*', rateLimiter());
+
+// Stricter rate limiting for sensitive endpoints
+app.use('/api/v1/auth/*', strictRateLimiter());
+app.use('/api/v1/billing/*', strictRateLimiter());
+
+// Input validation and sanitization for API routes
+app.use('/api/*', inputValidation());
 
 // Health check (no auth, no rate limit)
 app.get('/health', (c) => {
