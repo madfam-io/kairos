@@ -16,6 +16,7 @@ REST API documentation for the Kairos backend.
   - [Cards](#cards)
   - [NLP](#nlp)
   - [Content](#content)
+  - [Simplification (NLP)](#simplification-nlp)
   - [Pitch](#pitch)
   - [Speech](#speech)
   - [Sync](#sync)
@@ -593,7 +594,58 @@ Full linguistic analysis. **Requires auth.**
 
 ### Content
 
-#### POST /content/simplify
+#### POST /content/analyze
+
+Analyze content difficulty and comprehensibility. **Optional auth.**
+
+**Request:**
+```json
+{
+  "text": "这部电影的情节跌宕起伏，令人叹为观止。",
+  "knownWords": ["电影", "情节"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "difficulty": "advanced",
+    "estimatedHSKLevel": 5,
+    "comprehensibility": 72,
+    "estimatedReadingTime": 30,
+    "keyUnknownWords": ["跌宕起伏", "叹为观止"],
+    "processingTimeMs": 45
+  }
+}
+```
+
+#### POST /content/recommendations
+
+Get personalized content recommendations. **Requires auth.**
+
+**Request:**
+```json
+{
+  "limit": 10,
+  "type": "article",
+  "minComprehensibility": 70,
+  "maxComprehensibility": 95
+}
+```
+
+#### GET /content/level
+
+Get user's current level and learning progress. **Requires auth.**
+
+---
+
+### Simplification (NLP)
+
+> Note: Simplification endpoints are under `/nlp/simplify`, not `/content/simplify`.
+
+#### POST /nlp/simplify
 
 Simplify a sentence to target HSK level. **Requires auth.** **Premium feature.**
 
@@ -622,7 +674,7 @@ Simplify a sentence to target HSK level. **Requires auth.** **Premium feature.**
 }
 ```
 
-#### POST /content/simplify/batch
+#### POST /nlp/simplify/batch
 
 Simplify multiple sentences. **Requires auth.** **Premium feature.**
 

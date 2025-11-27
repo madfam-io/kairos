@@ -1,0 +1,19 @@
+# Bun configuration for @kairos/api
+
+[test]
+# Enable code coverage
+coverage = true
+
+# Coverage thresholds (fail if below)
+coverageThreshold = { line = 70, function = 70, statement = 70 }
+
+# Files to include in coverage
+coverageDir = "./src"
+
+# Files to ignore in coverage
+coverageIgnorePatterns = [
+  "**/__tests__/**",
+  "**/test/**",
+  "**/*.test.ts",
+  "**/db/migrations/**",
+]

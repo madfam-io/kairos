@@ -5,6 +5,8 @@ import type { AppEnv, AuthenticatedEnv } from '../types';
 import { requireAuth, requireSubscription, optionalAuth } from '../middleware/auth';
 import { AppError } from '../middleware/error-handler';
 import { getNLPClient } from '../services/nlp-client';
+import { getSimplifyClient } from '../services/simplify-client';
+import { log } from '../lib/logger';
 import {
   findGrammarInText,
   getGrammarExplanation,
@@ -52,7 +54,8 @@ const grammarSchema = z.object({
 });
 
 const ocrSchema = z.object({
-  language: z.enum(['zh-Hans', 'zh-Hant']).default('zh-Hans'),
+  image: z.string().min(1), // base64 encoded image or URL
+  language: z.enum(['zh', 'ja']).default('zh'),
   region: z
     .object({
       x: z.number(),
@@ -137,22 +140,54 @@ nlpRoutes.post(
     const user = c.get('user');
     const startTime = Date.now();
 
-    // TODO: Check monthly quota
-    // TODO: Check cache first
-    // TODO: Call Qwen2.5-7B on Modal
-
-    // Placeholder response
-    return c.json({
-      success: true,
-      data: {
-        originalText: text,
-        simplifiedText: text, // TODO: Actual simplification
+    try {
+      const simplifyClient = getSimplifyClient();
+      const result = await simplifyClient.simplify(text, {
         targetLevel,
-        confidence: 0.95,
-        cached: false,
-        processingTimeMs: Date.now() - startTime,
-      },
-    });
+        preserveNames: preserveProperNouns,
+        context,
+      });
+
+      log.info('Text simplified', {
+        userId: user.id,
+        targetLevel,
+        cached: result.cached,
+        tokensUsed: result.tokensUsed,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          originalText: result.original,
+          simplifiedText: result.simplified,
+          targetLevel: result.targetLevel,
+          confidence: result.confidence,
+          cached: result.cached,
+          processingTimeMs: Date.now() - startTime,
+        },
+      });
+    } catch (error) {
+      log.error('Simplification failed', error instanceof Error ? error : new Error(String(error)), {
+        userId: user.id,
+        textLength: text.length,
+        targetLevel,
+      });
+
+      // Return original text if service is unavailable
+      return c.json({
+        success: true,
+        data: {
+          originalText: text,
+          simplifiedText: text,
+          targetLevel,
+          confidence: 0,
+          cached: false,
+          processingTimeMs: Date.now() - startTime,
+          fallback: true,
+          error: 'Simplification service temporarily unavailable',
+        },
+      });
+    }
   }
 );
 
@@ -170,20 +205,69 @@ nlpRoutes.post(
     const user = c.get('user');
     const startTime = Date.now();
 
-    // TODO: Batch processing with caching
-    const results = sentences.map((s) => ({
-      index: s.index,
-      originalText: s.text,
-      simplifiedText: s.text, // TODO: Actual simplification
-    }));
+    try {
+      const simplifyClient = getSimplifyClient();
+      const texts = sentences.map((s) => s.text);
 
-    return c.json({
-      success: true,
-      data: {
-        results,
-        totalProcessingTimeMs: Date.now() - startTime,
-      },
-    });
+      const batchResult = await simplifyClient.simplifyBatch(texts, {
+        targetLevel,
+        preserveNames: true,
+      });
+
+      // Map results back with original indices
+      const results = sentences.map((s, i) => ({
+        index: s.index,
+        originalText: batchResult.results[i].original,
+        simplifiedText: batchResult.results[i].simplified,
+        confidence: batchResult.results[i].confidence,
+        cached: batchResult.results[i].cached,
+      }));
+
+      log.info('Batch simplification completed', {
+        userId: user.id,
+        sentenceCount: sentences.length,
+        targetLevel,
+        totalTokens: batchResult.totalTokens,
+        cacheHits: batchResult.cacheHits,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          results,
+          totalProcessingTimeMs: Date.now() - startTime,
+          totalTokens: batchResult.totalTokens,
+          cacheHits: batchResult.cacheHits,
+        },
+      });
+    } catch (error) {
+      log.error('Batch simplification failed', error instanceof Error ? error : new Error(String(error)), {
+        userId: user.id,
+        sentenceCount: sentences.length,
+        targetLevel,
+      });
+
+      // Fallback: return original texts
+      const results = sentences.map((s) => ({
+        index: s.index,
+        originalText: s.text,
+        simplifiedText: s.text,
+        confidence: 0,
+        cached: false,
+      }));
+
+      return c.json({
+        success: true,
+        data: {
+          results,
+          totalProcessingTimeMs: Date.now() - startTime,
+          totalTokens: 0,
+          cacheHits: 0,
+          fallback: true,
+          error: 'Simplification service temporarily unavailable',
+        },
+      });
+    }
   }
 );
 
@@ -320,19 +404,24 @@ nlpRoutes.post('/grammar/seed', requireAuth(), async (c) => {
  * Extract text from image using PaddleOCR
  */
 nlpRoutes.post('/ocr', requireAuth(), zValidator('json', ocrSchema), async (c) => {
-  const { language, region } = c.req.valid('json');
+  const { image, language, region } = c.req.valid('json');
   const startTime = Date.now();
 
-  // TODO: Get image from request body or URL
-  // TODO: Call PaddleOCR service
+  const nlpClient = getNLPClient();
+  const result = await nlpClient.ocr(image, { language, region });
+
+  // Check if OCR actually returned text (service might be unavailable)
+  const serviceAvailable = result.text !== '' || result.confidence > 0;
 
   return c.json({
     success: true,
     data: {
-      text: '',
-      confidence: 0,
-      boundingBox: region ?? { x: 0, y: 0, width: 0, height: 0 },
+      text: result.text,
+      confidence: result.confidence,
+      boundingBox: result.bounding_box ?? region ?? { x: 0, y: 0, width: 0, height: 0 },
+      language: result.language,
       processingTimeMs: Date.now() - startTime,
+      serviceAvailable,
     },
   });
 });
@@ -404,28 +493,31 @@ nlpRoutes.post(
     const { text, includeReading, includeDefinitions, includeJlpt } = c.req.valid('json');
     const startTime = Date.now();
 
-    // TODO: Call Japanese NLP service (SudachiPy)
-    // For now, return a placeholder response
-    // In production, this would call the Japanese segmenter
+    const nlpClient = getNLPClient();
+    const result = await nlpClient.segmentJapanese(text, {
+      includeReading,
+      includeDefinitions,
+      includeJlpt,
+    });
 
-    // Simple character-by-character fallback
-    const segments = text.split('').map((char) => ({
-      text: char,
-      reading: null,
-      readingKatakana: null,
-      dictionaryForm: char,
-      partOfSpeech: null,
-      definitions: [],
-      jlptLevel: null,
-      isPunctuation: /[\s。、！？「」『』【】（）・…ー〜―.,!?()[\]{}\"'\-:;/\\]/.test(char),
+    // Map response to API format
+    const segments = result.segments.map((seg) => ({
+      text: seg.text,
+      reading: seg.reading,
+      readingKatakana: seg.reading_katakana,
+      dictionaryForm: seg.dictionary_form,
+      partOfSpeech: seg.part_of_speech,
+      definitions: seg.definitions,
+      jlptLevel: seg.jlpt_level,
+      isPunctuation: seg.is_punctuation,
     }));
 
     return c.json({
       success: true,
       data: {
         segments,
-        rawText: text,
-        wordCount: segments.filter((s) => !s.isPunctuation).length,
+        rawText: result.original_text,
+        wordCount: result.word_count,
         processingTimeMs: Date.now() - startTime,
         language: 'ja',
       },
@@ -440,19 +532,19 @@ nlpRoutes.post(
 nlpRoutes.get('/japanese/dictionary/:word', async (c) => {
   const word = decodeURIComponent(c.req.param('word'));
 
-  // TODO: Call Japanese dictionary service (JMdict)
-  // For now, return a placeholder response
+  const nlpClient = getNLPClient();
+  const result = await nlpClient.lookupJapanese(word);
 
   return c.json({
     success: true,
     data: {
-      word,
-      reading: null,
-      readingKatakana: null,
-      definitions: [],
-      jlptLevel: null,
-      partsOfSpeech: [],
-      found: false,
+      word: result.word,
+      reading: result.reading,
+      readingKatakana: result.reading_katakana,
+      definitions: result.definitions,
+      jlptLevel: result.jlpt_level,
+      partsOfSpeech: result.parts_of_speech,
+      found: result.found,
       language: 'ja',
     },
   });
@@ -530,14 +622,16 @@ nlpRoutes.post('/japanese/grammar/seed', requireAuth(), async (c) => {
 nlpRoutes.get('/japanese/jlpt/:word', async (c) => {
   const word = decodeURIComponent(c.req.param('word'));
 
-  // TODO: Look up in JLPT classifier
+  const nlpClient = getNLPClient();
+  const result = await nlpClient.getJLPTLevel(word);
+
   return c.json({
     success: true,
     data: {
-      word,
-      jlptLevel: null,
-      jlptName: null,
-      found: false,
+      word: result.word,
+      jlptLevel: result.jlpt_level,
+      jlptName: result.jlpt_name,
+      found: result.found,
     },
   });
 });

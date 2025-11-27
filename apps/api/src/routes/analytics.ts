@@ -13,8 +13,9 @@ import {
   generateInsights,
   updateDailyStats,
 } from '../services/analytics-dashboard';
-import { db, learningGoals } from '../db';
+import { db, learningGoals, analyticsEvents } from '../db';
 import { eq, and } from 'drizzle-orm';
+import { log } from '../lib/logger';
 
 export const analyticsRoutes = new Hono<AuthenticatedEnv>();
 
@@ -58,32 +59,54 @@ analyticsRoutes.post('/event', zValidator('json', eventSchema), async (c) => {
   const event = c.req.valid('json');
   const user = c.get('user');
 
-  // Update daily stats based on event type
-  switch (event.eventType) {
-    case 'word_lookup':
-      await updateDailyStats(user.id, { wordsLearned: 1 });
-      break;
-    case 'card_mined':
-      await updateDailyStats(user.id, { cardsMined: 1 });
-      break;
-    case 'card_exported':
-      await updateDailyStats(user.id, { cardsExported: 1 });
-      break;
-    case 'simplification_used':
-      await updateDailyStats(user.id, { simplificationsUsed: 1 });
-      break;
-    case 'session_end':
-      const duration = (event.eventData?.durationMinutes as number) || 0;
-      if (duration > 0) {
-        await updateDailyStats(user.id, { studyTimeMinutes: duration });
-      }
-      break;
-  }
+  try {
+    // Insert event into analytics_events table
+    await db.insert(analyticsEvents).values({
+      userId: user.id,
+      eventType: event.eventType,
+      eventData: event.eventData ?? {},
+      createdAt: event.timestamp ? new Date(event.timestamp) : new Date(),
+    });
 
-  return c.json({
-    success: true,
-    data: { recorded: true },
-  });
+    // Update daily stats based on event type
+    switch (event.eventType) {
+      case 'word_lookup':
+        await updateDailyStats(user.id, { wordsLearned: 1 });
+        break;
+      case 'card_mined':
+        await updateDailyStats(user.id, { cardsMined: 1 });
+        break;
+      case 'card_exported':
+        await updateDailyStats(user.id, { cardsExported: 1 });
+        break;
+      case 'simplification_used':
+        await updateDailyStats(user.id, { simplificationsUsed: 1 });
+        break;
+      case 'session_end':
+        const duration = (event.eventData?.durationMinutes as number) || 0;
+        if (duration > 0) {
+          await updateDailyStats(user.id, { studyTimeMinutes: duration });
+        }
+        break;
+    }
+
+    return c.json({
+      success: true,
+      data: { recorded: true },
+    });
+  } catch (error) {
+    log.error('Failed to record event', error instanceof Error ? error : new Error(String(error)), {
+      userId: user.id,
+      eventType: event.eventType,
+    });
+
+    // Still return success to not block the client
+    // Events can be retried or lost gracefully
+    return c.json({
+      success: true,
+      data: { recorded: false, warning: 'Event may not have been persisted' },
+    });
+  }
 });
 
 /**
@@ -94,11 +117,73 @@ analyticsRoutes.post('/events', zValidator('json', batchEventSchema), async (c) 
   const { events } = c.req.valid('json');
   const user = c.get('user');
 
-  // TODO: Batch insert into analytics_events table
-  return c.json({
-    success: true,
-    data: { recorded: events.length },
-  });
+  try {
+    // Prepare batch insert values
+    const insertValues = events.map((event) => ({
+      userId: user.id,
+      eventType: event.eventType,
+      eventData: event.eventData ?? {},
+      createdAt: event.timestamp ? new Date(event.timestamp) : new Date(),
+    }));
+
+    // Batch insert into analytics_events table
+    await db.insert(analyticsEvents).values(insertValues);
+
+    // Also update daily stats for relevant event types
+    const statsUpdates: Record<string, number> = {};
+
+    for (const event of events) {
+      switch (event.eventType) {
+        case 'word_lookup':
+          statsUpdates.wordsLearned = (statsUpdates.wordsLearned || 0) + 1;
+          break;
+        case 'card_mined':
+          statsUpdates.cardsMined = (statsUpdates.cardsMined || 0) + 1;
+          break;
+        case 'card_exported':
+          statsUpdates.cardsExported = (statsUpdates.cardsExported || 0) + 1;
+          break;
+        case 'simplification_used':
+          statsUpdates.simplificationsUsed = (statsUpdates.simplificationsUsed || 0) + 1;
+          break;
+        case 'session_end':
+          const duration = (event.eventData?.durationMinutes as number) || 0;
+          if (duration > 0) {
+            statsUpdates.studyTimeMinutes = (statsUpdates.studyTimeMinutes || 0) + duration;
+          }
+          break;
+      }
+    }
+
+    // Apply aggregated stats updates
+    if (Object.keys(statsUpdates).length > 0) {
+      await updateDailyStats(user.id, statsUpdates);
+    }
+
+    log.info('Batch analytics events recorded', {
+      userId: user.id,
+      eventCount: events.length,
+      eventTypes: [...new Set(events.map((e) => e.eventType))],
+    });
+
+    return c.json({
+      success: true,
+      data: { recorded: events.length },
+    });
+  } catch (error) {
+    log.error('Failed to record batch events', error instanceof Error ? error : new Error(String(error)), {
+      userId: user.id,
+      eventCount: events.length,
+    });
+
+    return c.json({
+      success: false,
+      error: {
+        code: 'BATCH_INSERT_FAILED',
+        message: 'Failed to record analytics events',
+      },
+    }, 500);
+  }
 });
 
 /**
