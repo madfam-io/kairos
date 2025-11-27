@@ -80,15 +80,40 @@ apps/api/
 │   │   ├── speech.ts         # TTS synthesis
 │   │   ├── sync.ts           # CRDT synchronization
 │   │   ├── analytics.ts      # Event tracking
-│   │   └── billing.ts        # Stripe integration
+│   │   ├── billing.ts        # Stripe integration
+│   │   ├── developer.ts      # Developer Platform API
+│   │   └── enterprise.ts     # Enterprise/Organization API
 │   ├── services/
+│   │   ├── developer/        # Developer Platform services
+│   │   │   ├── types.ts      # ApiScope, WebhookEvent, token types
+│   │   │   ├── applications.ts  # OAuth client CRUD
+│   │   │   ├── api-keys.ts   # API key management
+│   │   │   ├── oauth.ts      # OAuth2 authorization (PKCE)
+│   │   │   ├── webhooks.ts   # Webhook dispatch/delivery
+│   │   │   ├── usage.ts      # API usage logging
+│   │   │   ├── integrations.ts  # External providers
+│   │   │   └── index.ts      # Barrel export
+│   │   ├── organization/     # Enterprise Organization services
+│   │   │   ├── types.ts      # OrgRole, LicenseTier, analytics
+│   │   │   ├── core.ts       # Organization CRUD
+│   │   │   ├── members.ts    # Member management
+│   │   │   ├── departments.ts  # Department CRUD
+│   │   │   ├── invites.ts    # Invitations/bulk provisioning
+│   │   │   ├── decks.ts      # Organization deck library
+│   │   │   ├── licenses.ts   # License management
+│   │   │   ├── audit.ts      # Audit logging
+│   │   │   ├── analytics.ts  # Learning analytics
+│   │   │   ├── permissions.ts  # Role-based access control
+│   │   │   └── index.ts      # Barrel export
 │   │   ├── nlp-client.ts     # NLP service client
 │   │   ├── pitch-client.ts   # Pitch service client
-│   │   ├── simplify-client.ts# Simplification client
+│   │   ├── simplify-client.ts  # Simplification client
 │   │   ├── speech-client.ts  # Speech service client
 │   │   ├── anki.ts           # Anki export
 │   │   ├── analytics.ts      # Analytics aggregation
 │   │   └── billing.ts        # Stripe billing
+│   ├── lib/
+│   │   └── utils.ts          # Shared utilities (pagination, tokens, etc.)
 │   └── middleware/
 │       ├── auth.ts           # JWT authentication
 │       ├── error-handler.ts  # Error handling

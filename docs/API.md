@@ -21,6 +21,8 @@ REST API documentation for the Kairos backend.
   - [Sync](#sync)
   - [Analytics](#analytics)
   - [Billing](#billing)
+  - [Developer](#developer)
+  - [Enterprise](#enterprise)
 
 ## Authentication
 
@@ -903,6 +905,507 @@ Get customer portal URL. **Requires auth.**
 #### POST /billing/webhook
 
 Stripe webhook endpoint. **No auth** (verified by Stripe signature).
+
+---
+
+### Developer
+
+Developer Platform API for OAuth applications, API keys, webhooks, and integrations.
+
+#### GET /developer/applications
+
+List user's registered OAuth applications. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "My App",
+      "description": "App description",
+      "clientId": "kairos_app_...",
+      "redirectUris": ["https://myapp.com/callback"],
+      "scopes": ["read:vocabulary", "write:cards"],
+      "rateLimitTier": "standard",
+      "isVerified": false,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### POST /developer/applications
+
+Create a new OAuth application. **Requires auth.**
+
+**Request:**
+```json
+{
+  "name": "My Integration",
+  "description": "Optional description",
+  "websiteUrl": "https://myapp.com",
+  "redirectUris": ["https://myapp.com/callback"],
+  "scopes": ["read:vocabulary", "write:cards"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "My Integration",
+    "clientId": "kairos_app_...",
+    "clientSecret": "kairos_secret_...",
+    "redirectUris": ["https://myapp.com/callback"],
+    "scopes": ["read:vocabulary", "write:cards"]
+  },
+  "warning": "Store the client secret securely. It will not be shown again."
+}
+```
+
+#### POST /developer/applications/:appId/rotate-secret
+
+Rotate OAuth client secret. **Requires auth.**
+
+#### DELETE /developer/applications/:appId
+
+Delete an OAuth application. **Requires auth.**
+
+#### GET /developer/api-keys
+
+List user's API keys. **Requires auth.**
+
+#### POST /developer/api-keys
+
+Create a new API key. **Requires auth.**
+
+**Request:**
+```json
+{
+  "name": "Production Key",
+  "scopes": ["read:vocabulary", "read:progress"],
+  "expiresInDays": 90
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "Production Key",
+    "keyPrefix": "kairos_...",
+    "key": "kairos_live_...",
+    "scopes": ["read:vocabulary", "read:progress"],
+    "expiresAt": "2025-04-01T00:00:00Z"
+  },
+  "warning": "Store the API key securely. It will not be shown again."
+}
+```
+
+#### DELETE /developer/api-keys/:keyId
+
+Revoke an API key. **Requires auth.**
+
+#### GET /developer/authorized-apps
+
+List third-party apps the user has authorized. **Requires auth.**
+
+#### DELETE /developer/authorized-apps/:appId
+
+Revoke access for a third-party app. **Requires auth.**
+
+#### GET /developer/webhooks
+
+List user's webhooks. **Requires auth.**
+
+#### POST /developer/webhooks
+
+Create a webhook endpoint. **Requires auth.**
+
+**Request:**
+```json
+{
+  "url": "https://myapp.com/webhooks/kairos",
+  "description": "Production webhook",
+  "events": ["vocabulary.created", "card.created", "milestone.achieved"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "url": "https://myapp.com/webhooks/kairos",
+    "events": ["vocabulary.created", "card.created", "milestone.achieved"],
+    "secret": "whsec_..."
+  },
+  "warning": "Store the webhook secret securely. It will not be shown again."
+}
+```
+
+**Available Events:**
+- `vocabulary.created` - New vocabulary word added
+- `vocabulary.updated` - Vocabulary word updated
+- `vocabulary.deleted` - Vocabulary word deleted
+- `card.created` - New card mined
+- `card.exported` - Card exported to Anki
+- `milestone.achieved` - Learning milestone reached
+- `streak.updated` - Study streak changed
+- `review.completed` - Review session completed
+
+#### GET /developer/webhooks/:webhookId/deliveries
+
+Get webhook delivery history. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | number | 20 | Max deliveries to return (max 100) |
+
+#### POST /developer/webhooks/:webhookId/rotate-secret
+
+Rotate webhook secret. **Requires auth.**
+
+#### DELETE /developer/webhooks/:webhookId
+
+Delete a webhook. **Requires auth.**
+
+#### GET /developer/integrations
+
+List connected external integrations. **Requires auth.**
+
+#### DELETE /developer/integrations/:provider
+
+Disconnect an external integration. **Requires auth.**
+
+#### GET /developer/usage
+
+Get API usage statistics. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `apiKeyId` | string | - | Filter by specific API key |
+| `days` | number | 30 | Days of history (max 90) |
+
+#### GET /developer/scopes
+
+List available API scopes.
+
+**Available Scopes:**
+- `read:vocabulary` - Read vocabulary words and learning status
+- `write:vocabulary` - Add, update, or delete vocabulary words
+- `read:cards` - Read mined cards
+- `write:cards` - Create or modify cards
+- `read:progress` - Read learning progress and statistics
+- `read:profile` - Read user profile information
+- `write:profile` - Update user profile settings
+
+#### GET /developer/webhook-events
+
+List available webhook events with descriptions.
+
+---
+
+### Enterprise
+
+Enterprise/Organization API for institutional deployments.
+
+#### GET /enterprise/organizations
+
+List user's organizations. **Requires auth.**
+
+#### POST /enterprise/organizations
+
+Create a new organization. **Requires auth.**
+
+**Request:**
+```json
+{
+  "name": "Acme University",
+  "type": "university",
+  "domain": "acme.edu",
+  "billingEmail": "billing@acme.edu",
+  "maxSeats": 500
+}
+```
+
+**Organization Types:** `university`, `school`, `company`, `language_school`
+
+#### GET /enterprise/organizations/:orgId
+
+Get organization details. **Requires auth + org membership.**
+
+#### PATCH /enterprise/organizations/:orgId
+
+Update organization settings. **Requires auth + owner role.**
+
+#### GET /enterprise/organizations/by-slug/:slug
+
+Get organization public info by slug (for join pages).
+
+---
+
+#### Member Management
+
+#### GET /enterprise/organizations/:orgId/members
+
+List organization members. **Requires auth + org membership.**
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `departmentId` | string | Filter by department |
+| `role` | string | Filter by role: `owner`, `admin`, `instructor`, `member` |
+| `isActive` | boolean | Filter by active status |
+| `limit` | number | Items per page (default 50) |
+| `offset` | number | Pagination offset |
+
+#### POST /enterprise/organizations/:orgId/members/:userId
+
+Add a member by user ID. **Requires auth + admin role.**
+
+#### PATCH /enterprise/organizations/:orgId/members/:userId
+
+Update member role. **Requires auth + admin role.**
+
+**Request:**
+```json
+{
+  "role": "instructor"
+}
+```
+
+**Roles:** `admin`, `instructor`, `member` (owner cannot be changed)
+
+#### DELETE /enterprise/organizations/:orgId/members/:userId
+
+Remove a member. **Requires auth + admin role.**
+
+---
+
+#### Invitations
+
+#### GET /enterprise/organizations/:orgId/invites
+
+List pending invitations. **Requires auth + admin role.**
+
+#### POST /enterprise/organizations/:orgId/invites
+
+Create an invitation. **Requires auth + admin role.**
+
+**Request:**
+```json
+{
+  "email": "student@acme.edu",
+  "role": "member",
+  "departmentId": "uuid"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "token": "inv_...",
+    "expiresAt": "2025-01-08T00:00:00Z",
+    "inviteUrl": "https://app.kairos.dev/join/inv_..."
+  }
+}
+```
+
+#### POST /enterprise/organizations/:orgId/invites/bulk
+
+Bulk invite/provision users (up to 500). **Requires auth + admin role.**
+
+**Request:**
+```json
+{
+  "users": [
+    {
+      "email": "student1@acme.edu",
+      "displayName": "John Doe",
+      "studentId": "12345",
+      "departmentId": "uuid",
+      "role": "member"
+    }
+  ]
+}
+```
+
+#### POST /enterprise/invites/:token/accept
+
+Accept an invitation. **Requires auth.**
+
+#### DELETE /enterprise/organizations/:orgId/invites/:inviteId
+
+Cancel an invitation. **Requires auth + admin role.**
+
+---
+
+#### Departments
+
+#### GET /enterprise/organizations/:orgId/departments
+
+List departments. **Requires auth + org membership.**
+
+#### POST /enterprise/organizations/:orgId/departments
+
+Create a department. **Requires auth + admin role.**
+
+**Request:**
+```json
+{
+  "name": "Chinese Department",
+  "code": "CHIN",
+  "description": "Chinese language courses",
+  "parentId": "uuid"
+}
+```
+
+#### PATCH /enterprise/organizations/:orgId/departments/:deptId
+
+Update a department. **Requires auth + admin role.**
+
+#### DELETE /enterprise/organizations/:orgId/departments/:deptId
+
+Delete a department. **Requires auth + admin role.**
+
+---
+
+#### Organization Decks
+
+#### GET /enterprise/organizations/:orgId/decks
+
+List organization's private deck library. **Requires auth + org membership.**
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `departmentId` | string | Filter by department |
+
+#### POST /enterprise/organizations/:orgId/decks
+
+Add a deck to organization library. **Requires auth + instructor role.**
+
+**Request:**
+```json
+{
+  "deckId": "uuid",
+  "departmentId": "uuid",
+  "isRequired": true
+}
+```
+
+#### DELETE /enterprise/organizations/:orgId/decks/:deckId
+
+Remove a deck from organization library. **Requires auth + instructor role.**
+
+---
+
+#### Analytics
+
+#### GET /enterprise/organizations/:orgId/analytics
+
+Get organization learning analytics. **Requires auth + instructor role.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | number | 30 | Days of data (7-365) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalMembers": 150,
+    "activeMembers": 120,
+    "totalWordsLearned": 45000,
+    "averageWordsPerMember": 300,
+    "totalStudyTimeHours": 1200,
+    "averageStudyTimeHours": 8,
+    "topLearners": [
+      {
+        "userId": "uuid",
+        "displayName": "Jane Doe",
+        "wordsLearned": 850,
+        "studyTimeHours": 25.5
+      }
+    ],
+    "departmentBreakdown": [
+      {
+        "departmentId": "uuid",
+        "departmentName": "Chinese Department",
+        "memberCount": 50,
+        "wordsLearned": 15000
+      }
+    ],
+    "progressOverTime": [
+      {
+        "date": "2025-01-15",
+        "wordsLearned": 1500,
+        "activeUsers": 85
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### Audit Logs
+
+#### GET /enterprise/organizations/:orgId/audit-logs
+
+Get organization audit logs. **Requires auth + owner role.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | number | 50 | Items per page |
+| `offset` | number | 0 | Pagination offset |
+| `actorId` | string | - | Filter by actor |
+| `action` | string | - | Filter by action type |
+
+---
+
+#### License Management
+
+#### GET /enterprise/organizations/:orgId/license
+
+Get license information. **Requires auth + owner role.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "licenseTier": "premium",
+    "maxSeats": 500,
+    "usedSeats": 150,
+    "availableSeats": 350,
+    "licenseExpiresAt": "2026-01-01T00:00:00Z",
+    "isExpired": false
+  }
+}
+```
+
+**License Tiers:** `standard`, `premium`, `unlimited`
+
+#### PATCH /enterprise/organizations/:orgId/license
+
+Update license (admin only). **Requires auth + owner role.**
 
 ---
 

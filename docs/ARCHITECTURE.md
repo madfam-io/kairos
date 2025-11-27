@@ -226,9 +226,43 @@ Proprietary APIs (GPT-4, Claude) destroy margins at scale:
 | Component | Purpose |
 |-----------|---------|
 | `routes/` | API endpoint handlers |
-| `services/` | Business logic and external integrations |
+| `services/` | Business logic modules (organized by domain) |
+| `lib/` | Shared utilities (pagination, tokens, hashing) |
 | `middleware/` | Auth, rate limiting, error handling |
 | `db/` | Drizzle schema and queries |
+
+**Service Architecture**:
+```
+services/
+├── developer/           # Developer Platform APIs
+│   ├── types.ts         # ApiScope, WebhookEvent, token types
+│   ├── applications.ts  # OAuth client CRUD
+│   ├── api-keys.ts      # API key management
+│   ├── oauth.ts         # OAuth2 authorization flow (PKCE)
+│   ├── webhooks.ts      # Webhook dispatch and delivery
+│   ├── usage.ts         # API usage logging and stats
+│   ├── integrations.ts  # External provider connections
+│   └── index.ts         # Barrel export
+├── organization/        # Enterprise Organization APIs
+│   ├── types.ts         # OrgRole, LicenseTier, analytics types
+│   ├── core.ts          # Organization CRUD
+│   ├── members.ts       # Member management
+│   ├── departments.ts   # Department CRUD
+│   ├── invites.ts       # Invitations and bulk provisioning
+│   ├── decks.ts         # Organization deck library
+│   ├── licenses.ts      # License and seat management
+│   ├── audit.ts         # Audit logging
+│   ├── analytics.ts     # Learning analytics
+│   ├── permissions.ts   # Role-based access control
+│   └── index.ts         # Barrel export
+├── nlp-client.ts        # NLP service client
+├── pitch-client.ts      # Pitch service client
+├── simplify-client.ts   # Simplification client
+├── speech-client.ts     # Speech service client
+├── anki.ts              # Anki export
+├── analytics.ts         # User analytics aggregation
+└── billing.ts           # Stripe billing
+```
 
 **Middleware Stack**:
 ```
