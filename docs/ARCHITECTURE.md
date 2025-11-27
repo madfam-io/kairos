@@ -39,7 +39,7 @@ This document describes the high-level architecture, design decisions, and techn
         ▼                         ▼                         ▼
 ┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
 │  Auth Service │       │   PostgreSQL    │       │  AI Services    │
-│  (Supabase)   │       │   (Supabase)    │       │    (Modal)      │
+│   (Janua)     │       │                 │       │   (Docker)      │
 │               │       │                 │       │                 │
 │ - JWT tokens  │       │ - Users         │       │ - NLP           │
 │ - OAuth       │       │ - Vocabulary    │       │ - Simplify      │
@@ -103,7 +103,7 @@ Users should be able to learn without internet:
 ### 4. Cost-Efficient AI
 
 Proprietary APIs (GPT-4, Claude) destroy margins at scale:
-- **Self-hosted Qwen2.5-7B** on Modal ($0.0004/request vs $0.01+)
+- **Self-hosted Qwen3-30B-A3B** via Docker/Enclii ($0.0004/request vs $0.01+)
 - **Aggressive caching** for repeated sentences
 - **Pre-computed simplifications** for popular shows
 
@@ -266,7 +266,7 @@ Request
 
 ## AI Services
 
-All AI services are deployed on [Modal](https://modal.com) for serverless GPU inference.
+All AI services run as Docker containers, deployed locally via Docker Compose or in production via [Enclii](https://github.com/madfam-io/enclii).
 
 ### NLP Service (services/nlp)
 
@@ -288,7 +288,7 @@ All AI services are deployed on [Modal](https://modal.com) for serverless GPU in
 
 ### Simplification Service (services/simplify)
 
-**Model**: Qwen2.5-7B-Instruct (vLLM)
+**Model**: Qwen3-30B-A3B (vLLM)
 
 **Capabilities**:
 - Rewrite sentences to target HSK level
@@ -416,14 +416,14 @@ Client A                    Server                    Client B
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     Supabase Auth                                 │
+│                        Janua Auth                                 │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │   Supported Methods:                                              │
 │   - Email/password                                                │
 │   - Google OAuth                                                  │
-│   - Apple OAuth (required for iOS)                                │
-│   - Magic link (passwordless)                                     │
+│   - GitHub OAuth                                                  │
+│   - Microsoft OAuth                                               │
 │                                                                   │
 │   Token Lifecycle:                                                │
 │   - Access token: 15 minutes                                      │

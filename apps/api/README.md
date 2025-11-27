@@ -20,7 +20,7 @@ The API provides endpoints for:
 | [Bun](https://bun.sh) | JavaScript runtime |
 | [Hono](https://hono.dev) | Web framework |
 | [Drizzle ORM](https://orm.drizzle.team) | Database ORM |
-| [PostgreSQL](https://postgresql.org) | Database (via Supabase) |
+| [PostgreSQL](https://postgresql.org) | Database |
 | [Zod](https://zod.dev) | Schema validation |
 
 ## Quick Start
@@ -44,16 +44,19 @@ Create `.env.local` in the repository root:
 
 ```bash
 # Required
-DATABASE_URL=postgresql://...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
+
+# Janua Authentication
+JANUA_API_URL=http://localhost:4000
+JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
+JANUA_JWT_SECRET=your_jwt_secret_key
 
 # Optional
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
+NLP_SERVICE_URL=http://localhost:8000
 ```
 
 ## Project Structure
@@ -90,10 +93,12 @@ apps/api/
 │       ├── auth.ts           # JWT authentication
 │       ├── error-handler.ts  # Error handling
 │       └── rate-limiter.ts   # Rate limiting
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
+│   └── __tests__/
+│       ├── auth.test.ts
+│       ├── vocabulary.test.ts
+│       ├── middleware.test.ts
+│       ├── helpers/
+│       └── services/
 ├── drizzle.config.ts         # Drizzle configuration
 ├── package.json
 └── tsconfig.json
@@ -202,7 +207,7 @@ For complete API documentation, see [API Reference](../../docs/API.md).
 
 ### Authentication
 
-JWT verification via Supabase:
+JWT verification via Janua:
 
 ```typescript
 // Protected route
@@ -263,7 +268,7 @@ pnpm test:watch
 
 ```bash
 fly launch
-fly secrets set DATABASE_URL="..." SUPABASE_URL="..."
+fly secrets set DATABASE_URL="..." JANUA_API_URL="..."
 fly deploy
 ```
 
