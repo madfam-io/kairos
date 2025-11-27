@@ -8,6 +8,7 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
     "test": "bun test",
+    "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:e2e": "bun test e2e",
     "typecheck": "tsc --noEmit",
