@@ -220,6 +220,50 @@ export function apiRateLimiter(): MiddlewareHandler<AppEnv> {
   });
 }
 
+/**
+ * Rate limiter for leaderboard endpoints (prevent abuse)
+ */
+export function leaderboardRateLimiter(): MiddlewareHandler<AppEnv> {
+  return rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 30,
+    keyPrefix: 'rl:leaderboard',
+  });
+}
+
+/**
+ * Rate limiter for search/discovery endpoints
+ */
+export function searchRateLimiter(): MiddlewareHandler<AppEnv> {
+  return rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 40,
+    keyPrefix: 'rl:search',
+  });
+}
+
+/**
+ * Rate limiter for social features (follow, like, etc.)
+ */
+export function socialRateLimiter(): MiddlewareHandler<AppEnv> {
+  return rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 50,
+    keyPrefix: 'rl:social',
+  });
+}
+
+/**
+ * Rate limiter for review sessions (generous but protected)
+ */
+export function reviewRateLimiter(): MiddlewareHandler<AppEnv> {
+  return rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 120, // Higher for rapid card responses
+    keyPrefix: 'rl:review',
+  });
+}
+
 // Cleanup old entries from memory store periodically
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {

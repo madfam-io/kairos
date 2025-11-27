@@ -360,14 +360,55 @@ export function getRedisCache(): RedisCache | null {
  * Standardized cache key generators
  */
 export const cacheKeys = {
+  // User stats
   userStats: (userId: string) => `user:${userId}:stats`,
   userVocabularyCount: (userId: string) => `user:${userId}:vocab:count`,
   userVocabularyStats: (userId: string) => `user:${userId}:vocab:stats`,
   userDueCount: (userId: string) => `user:${userId}:vocab:due`,
+
+  // Shared content
   sharedDeck: (deckId: string) => `deck:${deckId}`,
   sharedDeckPopular: () => 'decks:popular',
+
+  // Organization
   organizationMembers: (orgId: string) => `org:${orgId}:members`,
   classroomStudents: (classroomId: string) => `classroom:${classroomId}:students`,
+
+  // Onboarding
+  userOnboarding: (userId: string) => `user:${userId}:onboarding`,
+  assessmentQuestions: (difficulty: string) => `assessment:questions:${difficulty}`,
+
+  // Review
+  userReviewPreferences: (userId: string) => `user:${userId}:review:prefs`,
+  userReviewStats: (userId: string) => `user:${userId}:review:stats`,
+  reviewModes: () => 'review:modes',
+  reviewCardTypes: () => 'review:cardTypes',
+
+  // Gamification
+  userXp: (userId: string) => `user:${userId}:xp`,
+  userAchievements: (userId: string) => `user:${userId}:achievements`,
+  userDailyGoals: (userId: string) => `user:${userId}:goals:daily`,
+  achievementDefinitions: () => 'achievements:definitions',
+  leaderboard: (type: string) => `leaderboard:${type}`,
+  studyGroup: (groupId: string) => `group:${groupId}`,
+  userStudyGroups: (userId: string) => `user:${userId}:groups`,
+
+  // Progress
+  userProgress: (userId: string) => `user:${userId}:progress`,
+  userHskProgress: (userId: string) => `user:${userId}:hsk:progress`,
+  userMilestones: (userId: string) => `user:${userId}:milestones`,
+  userVelocity: (userId: string, days: number) => `user:${userId}:velocity:${days}`,
+
+  // Discovery
+  contentCatalog: (type?: string) => type ? `content:catalog:${type}` : 'content:catalog:all',
+  contentTopics: () => 'content:topics',
+  topicContent: (topicId: string) => `content:topic:${topicId}`,
+  contentDetails: (contentId: string) => `content:${contentId}`,
+  featuredContent: () => 'content:featured',
+  userRecommendations: (userId: string) => `user:${userId}:recommendations`,
+  userContentProgress: (userId: string) => `user:${userId}:content:progress`,
+  contentComprehensibility: (userId: string, contentId: string) =>
+    `user:${userId}:content:${contentId}:comprehensibility`,
 };
 
 /**
@@ -413,6 +454,87 @@ export function invalidateVocabularyCache(userId: string): void {
   cache.delete(cacheKeys.userDueCount(userId));
 }
 
+/**
+ * Invalidate gamification cache for a user (after XP/achievement changes)
+ */
+export function invalidateGamificationCache(userId: string): void {
+  const cache = getCache();
+  cache.delete(cacheKeys.userXp(userId));
+  cache.delete(cacheKeys.userAchievements(userId));
+  cache.delete(cacheKeys.userDailyGoals(userId));
+  cache.delete(cacheKeys.userProgress(userId));
+
+  const redis = getRedisCache();
+  if (redis) {
+    redis.delete(cacheKeys.userXp(userId));
+    redis.delete(cacheKeys.userAchievements(userId));
+    redis.delete(cacheKeys.userDailyGoals(userId));
+  }
+}
+
+/**
+ * Invalidate leaderboard cache (after XP changes)
+ */
+export function invalidateLeaderboardCache(type?: string): void {
+  const cache = getCache();
+  if (type) {
+    cache.delete(cacheKeys.leaderboard(type));
+  } else {
+    cache.deletePattern('leaderboard:*');
+  }
+
+  const redis = getRedisCache();
+  if (redis && type) {
+    redis.delete(cacheKeys.leaderboard(type));
+  }
+}
+
+/**
+ * Invalidate progress cache for a user
+ */
+export function invalidateProgressCache(userId: string): void {
+  const cache = getCache();
+  cache.delete(cacheKeys.userProgress(userId));
+  cache.delete(cacheKeys.userHskProgress(userId));
+  cache.delete(cacheKeys.userMilestones(userId));
+  cache.deletePattern(`user:${userId}:velocity:*`);
+
+  const redis = getRedisCache();
+  if (redis) {
+    redis.delete(cacheKeys.userProgress(userId));
+    redis.delete(cacheKeys.userHskProgress(userId));
+  }
+}
+
+/**
+ * Invalidate review cache for a user
+ */
+export function invalidateReviewCache(userId: string): void {
+  const cache = getCache();
+  cache.delete(cacheKeys.userReviewPreferences(userId));
+  cache.delete(cacheKeys.userReviewStats(userId));
+
+  const redis = getRedisCache();
+  if (redis) {
+    redis.delete(cacheKeys.userReviewStats(userId));
+  }
+}
+
+/**
+ * Invalidate discovery/recommendation cache for a user
+ */
+export function invalidateDiscoveryCache(userId: string): void {
+  const cache = getCache();
+  cache.delete(cacheKeys.userRecommendations(userId));
+  cache.delete(cacheKeys.userContentProgress(userId));
+  cache.deletePattern(`user:${userId}:content:*`);
+
+  const redis = getRedisCache();
+  if (redis) {
+    redis.delete(cacheKeys.userRecommendations(userId));
+  }
+}
+
 export default {
   getCache,
   getRedisCache,
@@ -420,4 +542,9 @@ export default {
   cacheTtl,
   invalidateUserCache,
   invalidateVocabularyCache,
+  invalidateGamificationCache,
+  invalidateLeaderboardCache,
+  invalidateProgressCache,
+  invalidateReviewCache,
+  invalidateDiscoveryCache,
 };

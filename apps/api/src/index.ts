@@ -41,6 +41,12 @@ import { enterpriseRoutes } from './routes/enterprise';
 import { developerRoutes } from './routes/developer';
 import { ltiRoutes } from './routes/lti';
 import { docsRoutes } from './routes/docs';
+import { onboardingRoutes } from './routes/onboarding';
+import { reviewRoutes } from './routes/review';
+import { gamificationRoutes } from './routes/gamification';
+import { progressRoutes } from './routes/progress';
+import { discoveryRoutes } from './routes/discovery';
+import { notificationRoutes } from './routes/notifications';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter, strictRateLimiter } from './middleware/rate-limiter';
 import {
@@ -49,6 +55,9 @@ import {
   additionalSecurityHeaders,
   validateRequestId,
 } from './middleware/security';
+import { getJobQueue, startJobWorker, stopJobWorker } from './lib/jobs';
+import { registerAllJobHandlers } from './lib/jobs/handlers';
+import { registerDefaultTasks, startScheduler, stopScheduler } from './lib/jobs/scheduler';
 import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
@@ -209,6 +218,12 @@ api.route('/offline', offlineRoutes);
 api.route('/enterprise', enterpriseRoutes);
 api.route('/developer', developerRoutes);
 api.route('/lti', ltiRoutes);
+api.route('/onboarding', onboardingRoutes);
+api.route('/review', reviewRoutes);
+api.route('/gamification', gamificationRoutes);
+api.route('/progress', progressRoutes);
+api.route('/discovery', discoveryRoutes);
+api.route('/notifications', notificationRoutes);
 
 // Error handling
 app.onError(errorHandler);
@@ -244,10 +259,22 @@ if (env.NODE_ENV === 'production') {
   startHealthChecks(60000); // Every minute
 }
 
+// Initialize background job system
+registerAllJobHandlers();
+registerDefaultTasks();
+
+if (env.NODE_ENV === 'production') {
+  startJobWorker();
+  startScheduler();
+  log.info('Background job worker and scheduler started');
+}
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   log.shutdown('Received SIGTERM, shutting down gracefully');
   stopHealthChecks();
+  stopJobWorker();
+  stopScheduler();
   await flushSentry();
   process.exit(0);
 });
@@ -255,6 +282,8 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   log.shutdown('Received SIGINT, shutting down gracefully');
   stopHealthChecks();
+  stopJobWorker();
+  stopScheduler();
   await flushSentry();
   process.exit(0);
 });

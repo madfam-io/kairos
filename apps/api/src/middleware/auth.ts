@@ -2,6 +2,9 @@ import type { MiddlewareHandler } from 'hono';
 import type { AppEnv, AuthenticatedEnv } from '../types';
 import { AppError } from './error-handler';
 import { getJanuaClient, AuthError, type JanuaUser } from '../services/janua';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Map Janua user to Kairos user format
@@ -46,6 +49,35 @@ interface SubscriptionData {
 }
 
 /**
+ * Fetch subscription data from local database for better performance
+ * Falls back gracefully if user doesn't exist yet (first login)
+ */
+async function fetchSubscriptionFromDB(userId: string): Promise<SubscriptionData | null> {
+  try {
+    const result = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: {
+        subscriptionTier: true,
+        subscriptionExpiresAt: true,
+      },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      tier: (result.subscriptionTier as 'free' | 'learner' | 'immersion') || 'free',
+      expiresAt: result.subscriptionExpiresAt,
+    };
+  } catch {
+    // Database errors should not break authentication
+    // Fall back to Janua metadata
+    return null;
+  }
+}
+
+/**
  * Authentication middleware - validates Janua JWT and loads user
  */
 export function requireAuth(): MiddlewareHandler<AppEnv> {
@@ -67,10 +99,11 @@ export function requireAuth(): MiddlewareHandler<AppEnv> {
       // Convert token payload to user object
       const januaUser = janua.tokenToUser(payload);
 
-      // TODO: Optionally fetch subscription data from local database
-      // const subscriptionData = await fetchSubscriptionFromDB(januaUser.id);
+      // Fetch subscription data from local database for better performance
+      // This avoids relying solely on Janua metadata and provides faster lookups
+      const subscriptionData = await fetchSubscriptionFromDB(januaUser.id);
 
-      c.set('user', mapJanuaUser(januaUser));
+      c.set('user', mapJanuaUser(januaUser, subscriptionData ?? undefined));
 
       await next();
     } catch (err) {
@@ -106,7 +139,9 @@ export function optionalAuth(): MiddlewareHandler<AppEnv> {
       const payload = await janua.verifyToken(token);
       const januaUser = janua.tokenToUser(payload);
 
-      c.set('user', mapJanuaUser(januaUser));
+      // Fetch subscription from local DB for consistency
+      const subscriptionData = await fetchSubscriptionFromDB(januaUser.id);
+      c.set('user', mapJanuaUser(januaUser, subscriptionData ?? undefined));
     } catch {
       // Ignore auth errors for optional auth
       c.set('user', null);

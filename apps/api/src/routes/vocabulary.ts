@@ -8,6 +8,11 @@ import { db } from '../db';
 import { vocabulary } from '../db/schema';
 import { AppError } from '../middleware/error-handler';
 import { log } from '../lib/logger';
+import {
+  getStatsCache,
+  cacheKeys,
+  invalidateUserVocabularyCache,
+} from '../services/cache';
 
 export const vocabularyRoutes = new Hono<AuthenticatedEnv>();
 
@@ -158,6 +163,9 @@ vocabularyRoutes.post('/batch', zValidator('json', batchCreateSchema), async (c)
       )
     );
 
+  // Invalidate cache after vocabulary changes
+  await invalidateUserVocabularyCache(user.id);
+
   log.info('Batch vocabulary created', { userId: user.id, created, attempted: words.length });
 
   return c.json({
@@ -171,51 +179,62 @@ vocabularyRoutes.post('/batch', zValidator('json', batchCreateSchema), async (c)
 
 /**
  * GET /api/v1/vocabulary/stats
- * Get vocabulary statistics for the user
+ * Get vocabulary statistics for the user (cached for 5 minutes)
  */
 vocabularyRoutes.get('/stats', async (c) => {
   const user = c.get('user');
+  const cache = getStatsCache();
+  const cacheKey = cacheKeys.vocabularyStats(user.id);
 
-  // Aggregate stats in a single query
-  const stats = await db
-    .select({
-      total: count(),
-      new: sql<number>`count(*) filter (where ${vocabulary.status} = 'new')`,
-      learning: sql<number>`count(*) filter (where ${vocabulary.status} = 'learning')`,
-      known: sql<number>`count(*) filter (where ${vocabulary.status} = 'known')`,
-      dueForReview: sql<number>`count(*) filter (where ${vocabulary.nextReview} <= now())`,
-      hsk1: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 1)`,
-      hsk2: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 2)`,
-      hsk3: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 3)`,
-      hsk4: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 4)`,
-      hsk5: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 5)`,
-      hsk6: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 6)`,
-    })
-    .from(vocabulary)
-    .where(eq(vocabulary.userId, user.id));
+  // Try to get from cache first
+  const data = await cache.getOrSet(
+    cacheKey,
+    async () => {
+      // Aggregate stats in a single query
+      const stats = await db
+        .select({
+          total: count(),
+          new: sql<number>`count(*) filter (where ${vocabulary.status} = 'new')`,
+          learning: sql<number>`count(*) filter (where ${vocabulary.status} = 'learning')`,
+          known: sql<number>`count(*) filter (where ${vocabulary.status} = 'known')`,
+          dueForReview: sql<number>`count(*) filter (where ${vocabulary.nextReview} <= now())`,
+          hsk1: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 1)`,
+          hsk2: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 2)`,
+          hsk3: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 3)`,
+          hsk4: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 4)`,
+          hsk5: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 5)`,
+          hsk6: sql<number>`count(*) filter (where ${vocabulary.hskLevel} = 6)`,
+        })
+        .from(vocabulary)
+        .where(eq(vocabulary.userId, user.id));
 
-  const result = stats[0] || {
-    total: 0, new: 0, learning: 0, known: 0, dueForReview: 0,
-    hsk1: 0, hsk2: 0, hsk3: 0, hsk4: 0, hsk5: 0, hsk6: 0
-  };
+      const result = stats[0] || {
+        total: 0, new: 0, learning: 0, known: 0, dueForReview: 0,
+        hsk1: 0, hsk2: 0, hsk3: 0, hsk4: 0, hsk5: 0, hsk6: 0
+      };
+
+      return {
+        total: result.total,
+        new: result.new,
+        learning: result.learning,
+        known: result.known,
+        dueForReview: result.dueForReview,
+        byHskLevel: {
+          1: result.hsk1,
+          2: result.hsk2,
+          3: result.hsk3,
+          4: result.hsk4,
+          5: result.hsk5,
+          6: result.hsk6,
+        },
+      };
+    },
+    300 // 5 minutes TTL
+  );
 
   return c.json({
     success: true,
-    data: {
-      total: result.total,
-      new: result.new,
-      learning: result.learning,
-      known: result.known,
-      dueForReview: result.dueForReview,
-      byHskLevel: {
-        1: result.hsk1,
-        2: result.hsk2,
-        3: result.hsk3,
-        4: result.hsk4,
-        5: result.hsk5,
-        6: result.hsk6,
-      },
-    },
+    data,
   });
 });
 
@@ -295,6 +314,9 @@ vocabularyRoutes.patch('/:id', zValidator('json', updateSchema), async (c) => {
     .where(and(eq(vocabulary.id, id), eq(vocabulary.userId, user.id)))
     .returning();
 
+  // Invalidate cache after update
+  await invalidateUserVocabularyCache(user.id);
+
   return c.json({
     success: true,
     data: updated,
@@ -317,6 +339,9 @@ vocabularyRoutes.delete('/:id', async (c) => {
   if (result.length === 0) {
     throw new AppError('NOT_FOUND', 'Vocabulary word not found', 404);
   }
+
+  // Invalidate cache after deletion
+  await invalidateUserVocabularyCache(user.id);
 
   return c.json({
     success: true,
@@ -395,6 +420,9 @@ vocabularyRoutes.post(
       })
       .where(eq(vocabulary.id, id))
       .returning();
+
+    // Invalidate cache after review (status may have changed)
+    await invalidateUserVocabularyCache(user.id);
 
     return c.json({
       success: true,
