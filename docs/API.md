@@ -12,8 +12,13 @@ REST API documentation for the Kairos backend.
 - [Endpoints](#endpoints)
   - [Auth](#auth)
   - [User](#user)
+  - [Onboarding](#onboarding)
   - [Vocabulary](#vocabulary)
   - [Cards](#cards)
+  - [Review](#review)
+  - [Progress](#progress)
+  - [Gamification](#gamification)
+  - [Discovery](#discovery)
   - [NLP](#nlp)
   - [Content](#content)
   - [Simplification (NLP)](#simplification-nlp)
@@ -259,6 +264,173 @@ Get learning statistics. **Requires auth.**
     "totalStudyTimeMinutes": 3600,
     "lastActiveAt": "2025-01-15T10:30:00Z"
   }
+}
+```
+
+---
+
+### Onboarding
+
+Smart onboarding flow with HSK assessment and personalized recommendations.
+
+#### GET /onboarding/status
+
+Get current onboarding status. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "currentStep": "language_background",
+    "completedSteps": ["welcome"],
+    "isCompleted": false,
+    "startedAt": "2025-01-15T10:00:00Z"
+  }
+}
+```
+
+#### PATCH /onboarding/step
+
+Update onboarding step. **Requires auth.**
+
+**Request:**
+```json
+{
+  "step": "learning_goals",
+  "completed": true
+}
+```
+
+#### POST /onboarding/skip
+
+Skip onboarding (marks as completed). **Requires auth.**
+
+#### PATCH /onboarding/language-background
+
+Update language background. **Requires auth.**
+
+**Request:**
+```json
+{
+  "nativeLanguage": "en",
+  "studiedYears": 2,
+  "studyEnvironment": "self_study",
+  "previousCourses": ["university", "online"],
+  "chineseExposure": "limited"
+}
+```
+
+#### PATCH /onboarding/learning-goals
+
+Update learning goals. **Requires auth.**
+
+**Request:**
+```json
+{
+  "primaryGoal": "conversation",
+  "targetLevel": "hsk4",
+  "dailyMinutes": 30,
+  "interests": ["movies", "technology", "travel"],
+  "motivations": ["career", "culture"]
+}
+```
+
+#### GET /onboarding/assessment/questions
+
+Get HSK assessment questions. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `count` | number | 10 | Number of questions (max 30) |
+| `difficulty` | string | - | Starting difficulty: `beginner`, `intermediate`, `advanced` |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "questions": [
+      {
+        "id": "uuid",
+        "type": "translation",
+        "hskLevel": 1,
+        "question": "What does '你好' mean?",
+        "options": ["Hello", "Goodbye", "Thank you", "Sorry"],
+        "correctIndex": 0
+      }
+    ],
+    "totalCount": 10
+  }
+}
+```
+
+#### POST /onboarding/assessment/submit
+
+Submit HSK assessment answers. **Requires auth.**
+
+**Request:**
+```json
+{
+  "answers": [
+    { "questionId": "uuid", "selectedIndex": 0 },
+    { "questionId": "uuid", "selectedIndex": 2 }
+  ],
+  "timeSpentSeconds": 180
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "estimatedLevel": 3,
+    "confidence": 0.85,
+    "breakdown": {
+      "hsk1": { "correct": 5, "total": 5 },
+      "hsk2": { "correct": 4, "total": 5 },
+      "hsk3": { "correct": 3, "total": 5 }
+    },
+    "recommendation": "You appear to be at HSK 3 level. We recommend starting with HSK 3 content."
+  }
+}
+```
+
+#### PATCH /onboarding/preferences
+
+Update review preferences during onboarding. **Requires auth.**
+
+**Request:**
+```json
+{
+  "showPinyin": true,
+  "showHanzi": true,
+  "enableAudio": true,
+  "reviewTime": "evening",
+  "reminderEnabled": true
+}
+```
+
+#### GET /onboarding/recommendations
+
+Get personalized content recommendations. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "type": "show",
+      "title": "Day and Night",
+      "hskLevel": 3.5,
+      "comprehensibility": 78,
+      "reason": "Matches your interest in drama and your HSK level"
+    }
+  ]
 }
 ```
 
@@ -510,6 +682,876 @@ Supported formats: `anki`, `csv`, `json`
     "expiresAt": "2025-01-16T00:00:00Z",
     "cardCount": 25
   }
+}
+```
+
+---
+
+### Review
+
+Advanced review system with multiple card types and modes.
+
+**Card Types:**
+- `standard` - Traditional front/back flashcard (Hanzi → Pinyin + Meaning)
+- `reverse` - Reverse flashcard (Meaning → Hanzi)
+- `cloze` - Fill-in-the-blank sentences
+- `audio` - Listen and type/select
+- `sentence` - Full sentence translation
+- `tone` - Tone recognition
+- `handwriting` - Stroke order practice
+- `context` - Word in context selection
+
+**Review Modes:**
+- `spaced_repetition` - SM-2 algorithm based SRS
+- `speed_drill` - Timed rapid review
+- `deep_practice` - Extended practice with varied card types
+- `new_only` - Only new vocabulary
+- `weak_only` - Focus on difficult words
+
+#### GET /review/preferences
+
+Get review preferences. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "defaultMode": "spaced_repetition",
+    "cardsPerSession": 20,
+    "cardTypeWeights": {
+      "standard": 40,
+      "reverse": 25,
+      "cloze": 20,
+      "audio": 15
+    },
+    "enableTimer": false,
+    "timerSecondsPerCard": 10
+  }
+}
+```
+
+#### PATCH /review/preferences
+
+Update review preferences. **Requires auth.**
+
+**Request:**
+```json
+{
+  "defaultMode": "speed_drill",
+  "cardsPerSession": 30,
+  "cardTypeWeights": {
+    "standard": 50,
+    "reverse": 25,
+    "cloze": 15,
+    "audio": 10
+  },
+  "enableTimer": true,
+  "timerSecondsPerCard": 15
+}
+```
+
+#### POST /review/session/start
+
+Start a review session. **Requires auth.**
+
+**Request:**
+```json
+{
+  "mode": "deep_practice",
+  "cardCount": 25,
+  "cardTypes": ["standard", "reverse", "cloze"],
+  "timerEnabled": true,
+  "timerSeconds": 10
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "uuid",
+    "mode": "deep_practice",
+    "cards": [
+      {
+        "id": "uuid",
+        "vocabularyId": "uuid",
+        "cardType": "standard",
+        "question": "学习",
+        "questionAudio": "https://...",
+        "options": ["to study", "to work", "to eat", "to sleep"],
+        "correctIndex": 0
+      }
+    ],
+    "totalCards": 25
+  }
+}
+```
+
+#### POST /review/session/:sessionId/response
+
+Submit a card response. **Requires auth.**
+
+**Request:**
+```json
+{
+  "reviewCardId": "uuid",
+  "vocabularyId": "uuid",
+  "cardType": "standard",
+  "userAnswer": "to study",
+  "correctAnswer": "to study",
+  "isCorrect": true,
+  "quality": 4,
+  "responseTimeMs": 2500
+}
+```
+
+#### POST /review/session/:sessionId/end
+
+End a review session. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "uuid",
+    "cardsReviewed": 25,
+    "correctCount": 22,
+    "accuracy": 0.88,
+    "totalTimeSeconds": 300,
+    "xpEarned": 50,
+    "streakMaintained": true
+  }
+}
+```
+
+#### GET /review/history
+
+Get review session history. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | number | 20 | Items per page (max 100) |
+| `offset` | number | 0 | Pagination offset |
+
+#### GET /review/stats
+
+Get review statistics. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "overall": {
+      "totalSessions": 150,
+      "totalCardsReviewed": 3500,
+      "averageAccuracy": 0.85,
+      "totalTimeMinutes": 600
+    },
+    "cardTypePerformance": {
+      "standard": { "accuracy": 0.90, "count": 1500 },
+      "reverse": { "accuracy": 0.82, "count": 800 },
+      "cloze": { "accuracy": 0.78, "count": 700 },
+      "audio": { "accuracy": 0.85, "count": 500 }
+    },
+    "recentPerformance": [
+      { "date": "2025-01-15", "accuracy": 0.87, "cardsReviewed": 30 }
+    ]
+  }
+}
+```
+
+#### GET /review/modes
+
+Get available review modes and card types. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "modes": [
+      {
+        "id": "spaced_repetition",
+        "name": "Spaced Repetition",
+        "description": "Optimal learning with SM-2 algorithm"
+      }
+    ],
+    "cardTypes": [
+      {
+        "id": "standard",
+        "name": "Standard",
+        "description": "Hanzi to meaning"
+      }
+    ]
+  }
+}
+```
+
+#### GET /review/cards/:vocabularyId
+
+Get all card variations for a vocabulary word. **Requires auth.**
+
+---
+
+### Progress
+
+Comprehensive learning progress tracking and visualization.
+
+#### GET /progress/summary
+
+Get overall progress summary. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "estimatedHskLevel": 3.5,
+    "hskProgress": {
+      "hsk1": { "learned": 150, "total": 150, "progress": 100 },
+      "hsk2": { "learned": 280, "total": 300, "progress": 93 },
+      "hsk3": { "learned": 180, "total": 600, "progress": 30 }
+    },
+    "vocabulary": {
+      "total": 610,
+      "learning": 400,
+      "known": 210
+    },
+    "streak": {
+      "current": 15,
+      "longest": 42
+    },
+    "level": 12,
+    "totalXp": 5400
+  }
+}
+```
+
+#### GET /progress/hsk
+
+Get detailed HSK level progress. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "level": 1,
+      "wordsLearned": 150,
+      "wordsKnown": 150,
+      "totalWords": 150,
+      "progress": 100,
+      "isComplete": true
+    },
+    {
+      "level": 2,
+      "wordsLearned": 280,
+      "wordsKnown": 250,
+      "totalWords": 300,
+      "progress": 83,
+      "isComplete": false
+    }
+  ]
+}
+```
+
+#### GET /progress/vocabulary-tree
+
+Get vocabulary tree visualization data. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "root",
+    "name": "Vocabulary",
+    "type": "root",
+    "count": 610,
+    "mastered": 210,
+    "children": [
+      {
+        "id": "hsk1",
+        "name": "HSK 1",
+        "type": "level",
+        "count": 150,
+        "mastered": 150,
+        "children": [...]
+      }
+    ]
+  }
+}
+```
+
+#### GET /progress/velocity
+
+Get learning velocity over time. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | number | 30 | Days of history (max 365) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "date": "2025-01-15",
+      "wordsLearned": 15,
+      "wordsReviewed": 45,
+      "studyMinutes": 30,
+      "accuracy": 0.87
+    }
+  ]
+}
+```
+
+#### GET /progress/milestones
+
+Get achieved and pending milestones. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "achieved": [
+      {
+        "id": "first_word",
+        "name": "First Steps",
+        "description": "Learned your first word",
+        "achievedAt": "2025-01-01T10:00:00Z",
+        "xpAwarded": 10
+      }
+    ],
+    "pending": [
+      {
+        "id": "hsk1_complete",
+        "name": "HSK 1 Master",
+        "description": "Complete all HSK 1 vocabulary",
+        "progress": 95,
+        "xpReward": 100
+      }
+    ],
+    "total": 50,
+    "completedCount": 15
+  }
+}
+```
+
+#### GET /progress/retention
+
+Get retention curve data. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "daysSinceReview": 1,
+      "retention": 95,
+      "wordCount": 100
+    },
+    {
+      "daysSinceReview": 7,
+      "retention": 82,
+      "wordCount": 50
+    }
+  ]
+}
+```
+
+#### GET /progress/study-time
+
+Get study time distribution. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "distribution": [
+      { "hour": 0, "minutes": 5 },
+      { "hour": 8, "minutes": 45 },
+      { "hour": 20, "minutes": 30 }
+    ],
+    "totalMinutes": 600,
+    "averagePerDay": 20
+  }
+}
+```
+
+#### GET /progress/charts
+
+Get all chart data for progress dashboard. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | number | 30 | Days of history |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "velocity": [...],
+    "hskProgress": [...],
+    "retention": [...],
+    "studyTimeDistribution": [...]
+  }
+}
+```
+
+---
+
+### Gamification
+
+XP, achievements, leaderboards, and social features.
+
+#### GET /gamification/xp
+
+Get user's XP and level info. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalXp": 5400,
+    "level": 12,
+    "currentLevelXp": 400,
+    "nextLevelXp": 550,
+    "progressPercent": 73
+  }
+}
+```
+
+#### GET /gamification/achievements
+
+Get user's achievements. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `earned` | boolean | Filter by earned status |
+| `category` | string | Filter by category |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "earned": [
+      {
+        "id": "streak_7",
+        "name": "Week Warrior",
+        "description": "Maintain a 7-day streak",
+        "icon": "🔥",
+        "rarity": "common",
+        "xpAwarded": 50,
+        "earnedAt": "2025-01-08T00:00:00Z"
+      }
+    ],
+    "available": [
+      {
+        "id": "streak_30",
+        "name": "Monthly Master",
+        "description": "Maintain a 30-day streak",
+        "icon": "🔥",
+        "rarity": "rare",
+        "xpReward": 200,
+        "progress": 15,
+        "target": 30
+      }
+    ],
+    "stats": {
+      "totalEarned": 15,
+      "totalAvailable": 45,
+      "totalXpFromAchievements": 750
+    }
+  }
+}
+```
+
+#### GET /gamification/goals
+
+Get daily/weekly goals progress. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "daily": {
+      "wordsToLearn": { "current": 8, "target": 10 },
+      "reviewCards": { "current": 30, "target": 20 },
+      "studyMinutes": { "current": 25, "target": 30 },
+      "completed": false,
+      "xpReward": 25
+    },
+    "weekly": {
+      "wordsToLearn": { "current": 45, "target": 50 },
+      "perfectDays": { "current": 3, "target": 5 },
+      "completed": false,
+      "xpReward": 100
+    }
+  }
+}
+```
+
+#### PATCH /gamification/goals
+
+Update daily goals. **Requires auth.**
+
+**Request:**
+```json
+{
+  "wordsToLearn": 15,
+  "reviewCards": 30,
+  "studyMinutes": 45
+}
+```
+
+#### GET /gamification/leaderboard
+
+Get leaderboard. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | string | `weekly` | Period: `daily`, `weekly`, `monthly`, `allTime` |
+| `limit` | number | 50 | Max entries |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "type": "weekly",
+    "entries": [
+      {
+        "rank": 1,
+        "userId": "uuid",
+        "displayName": "学霸",
+        "xp": 1250,
+        "level": 15,
+        "isCurrentUser": false
+      }
+    ],
+    "currentUser": {
+      "rank": 42,
+      "xp": 450
+    }
+  }
+}
+```
+
+#### GET /gamification/groups
+
+Get user's study groups. **Requires auth.**
+
+#### POST /gamification/groups
+
+Create a study group. **Requires auth.**
+
+**Request:**
+```json
+{
+  "name": "HSK 4 Study Buddies",
+  "description": "Preparing for HSK 4 together",
+  "isPrivate": false,
+  "maxMembers": 20
+}
+```
+
+#### POST /gamification/groups/:groupId/join
+
+Join a study group. **Requires auth.**
+
+#### DELETE /gamification/groups/:groupId/leave
+
+Leave a study group. **Requires auth.**
+
+#### GET /gamification/following
+
+Get users you're following. **Requires auth.**
+
+#### GET /gamification/followers
+
+Get your followers. **Requires auth.**
+
+#### POST /gamification/follow/:userId
+
+Follow a user. **Requires auth.**
+
+#### DELETE /gamification/follow/:userId
+
+Unfollow a user. **Requires auth.**
+
+#### GET /gamification/feed
+
+Get activity feed. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | string | `following` | Feed type: `following`, `global`, `group` |
+| `limit` | number | 20 | Items per page |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "type": "achievement",
+      "userId": "uuid",
+      "displayName": "学习者",
+      "content": {
+        "achievementId": "streak_30",
+        "achievementName": "Monthly Master"
+      },
+      "likeCount": 5,
+      "isLiked": false,
+      "createdAt": "2025-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### POST /gamification/feed/:activityId/like
+
+Like an activity. **Requires auth.**
+
+#### DELETE /gamification/feed/:activityId/like
+
+Unlike an activity. **Requires auth.**
+
+#### GET /gamification/summary
+
+Get gamification summary for dashboard. **Requires auth.**
+
+---
+
+### Discovery
+
+Content discovery with comprehensibility scoring.
+
+#### GET /discovery/search
+
+Search content catalog. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `q` | string | - | Search query |
+| `type` | string | - | Content type filter |
+| `hskMin` | number | - | Minimum HSK level (1-6) |
+| `hskMax` | number | - | Maximum HSK level (1-6) |
+| `topics` | string | - | Comma-separated topic IDs |
+| `comprehensibilityMin` | number | - | Minimum comprehensibility (0-100) |
+| `limit` | number | 20 | Items per page (max 50) |
+| `offset` | number | 0 | Pagination offset |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "type": "show",
+      "title": "Day and Night",
+      "originalTitle": "白夜追凶",
+      "description": "Twin brothers solve crimes...",
+      "coverImageUrl": "https://...",
+      "hskLevel": 4.2,
+      "comprehensibility": 75,
+      "avgRating": 4.5
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 150,
+      "limit": 20,
+      "offset": 0,
+      "hasMore": true
+    }
+  }
+}
+```
+
+#### GET /discovery/recommendations
+
+Get personalized recommendations. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | number | 10 | Max recommendations (max 30) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "type": "show",
+      "title": "Day and Night",
+      "hskLevel": 4.2,
+      "comprehensibility": 78,
+      "matchScore": 0.92,
+      "reason": "Matches your interest in crime dramas"
+    }
+  ]
+}
+```
+
+#### GET /discovery/topics
+
+Get browsable topics. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `parent` | string | Parent topic ID for subtopics |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "entertainment",
+      "name": "Entertainment",
+      "nameZh": "娱乐",
+      "icon": "🎬",
+      "contentCount": 250,
+      "children": [
+        { "id": "drama", "name": "Drama", "contentCount": 120 }
+      ]
+    }
+  ]
+}
+```
+
+#### GET /discovery/topics/:id/content
+
+Get content for a topic. **Requires auth.**
+
+#### GET /discovery/content/:id
+
+Get content details. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "type": "show",
+    "title": "Day and Night",
+    "originalTitle": "白夜追凶",
+    "description": "Twin brothers solve crimes...",
+    "coverImageUrl": "https://...",
+    "hskLevel": 4.2,
+    "vocabularyDensity": 8.5,
+    "speechRate": 180,
+    "comprehensibility": 75,
+    "userInteraction": {
+      "status": "in_progress",
+      "progress": 35,
+      "lastAccessedAt": "2025-01-14T20:00:00Z"
+    }
+  }
+}
+```
+
+#### GET /discovery/content/:id/comprehensibility
+
+Get detailed comprehensibility analysis. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "score": 75,
+    "breakdown": {
+      "knownWords": 450,
+      "unknownWords": 150,
+      "totalWords": 600,
+      "coveragePercent": 75
+    },
+    "unknownByHsk": {
+      "hsk4": 80,
+      "hsk5": 50,
+      "hsk6": 20
+    },
+    "keyVocabulary": [
+      { "word": "案件", "pinyin": "àn jiàn", "frequency": 45 }
+    ]
+  }
+}
+```
+
+#### POST /discovery/content/:id/track
+
+Track content interaction. **Requires auth.**
+
+**Request:**
+```json
+{
+  "status": "in_progress",
+  "progress": 45,
+  "comprehensibility": 70,
+  "difficulty": "just_right"
+}
+```
+
+**Status values:** `discovered`, `started`, `in_progress`, `completed`, `dropped`
+**Difficulty values:** `too_easy`, `just_right`, `challenging`, `too_hard`
+
+#### GET /discovery/in-progress
+
+Get in-progress content. **Requires auth.**
+
+#### GET /discovery/completed
+
+Get completed content with pagination. **Requires auth.**
+
+#### GET /discovery/featured
+
+Get featured content. **Requires auth.**
+
+#### GET /discovery/types
+
+Get available content types. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "show", "name": "TV Shows", "icon": "📺" },
+    { "id": "movie", "name": "Movies", "icon": "🎬" },
+    { "id": "book", "name": "Books", "icon": "📚" },
+    { "id": "article", "name": "Articles", "icon": "📰" },
+    { "id": "podcast", "name": "Podcasts", "icon": "🎙️" },
+    { "id": "course", "name": "Courses", "icon": "🎓" }
+  ]
 }
 ```
 
