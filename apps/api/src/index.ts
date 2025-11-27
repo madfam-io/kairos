@@ -12,6 +12,12 @@ validateEnv();
 import { log } from './lib/logger';
 import { initSentry, flushSentry } from './lib/sentry';
 import { metricsMiddleware, formatPrometheusMetrics, getMetricsJson } from './lib/metrics';
+import {
+  performanceMonitoring,
+  getSystemHealth,
+  startHealthChecks,
+  stopHealthChecks,
+} from './lib/monitoring';
 
 initSentry();
 
@@ -64,6 +70,9 @@ app.use('*', ipBlocker());
 
 // Metrics collection (early in middleware chain)
 app.use('*', metricsMiddleware());
+
+// Performance monitoring (tracks latency and errors)
+app.use('*', performanceMonitoring());
 
 // Request logging
 app.use('*', async (c, next) => {
@@ -126,6 +135,13 @@ app.get('/health', (c) => {
     version: process.env.npm_package_version ?? '0.1.0',
     environment: env.NODE_ENV,
   });
+});
+
+// Comprehensive health check with all dependencies
+app.get('/health/full', async (c) => {
+  const health = await getSystemHealth();
+  const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
+  return c.json(health, statusCode);
 });
 
 // Prometheus metrics endpoint (no auth for scraping)
@@ -223,15 +239,22 @@ log.startup('Kairos API starting', {
   version: process.env.npm_package_version ?? '0.1.0',
 });
 
+// Start periodic health checks in production
+if (env.NODE_ENV === 'production') {
+  startHealthChecks(60000); // Every minute
+}
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   log.shutdown('Received SIGTERM, shutting down gracefully');
+  stopHealthChecks();
   await flushSentry();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   log.shutdown('Received SIGINT, shutting down gracefully');
+  stopHealthChecks();
   await flushSentry();
   process.exit(0);
 });
