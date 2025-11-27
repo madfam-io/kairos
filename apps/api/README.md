@@ -46,14 +46,18 @@ Create `.env.local` in the repository root:
 # Required
 DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
 
-# Janua Authentication
+# Janua Authentication (https://github.com/madfam-io/janua)
 JANUA_API_URL=http://localhost:4000
 JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
-JANUA_JWT_SECRET=your_jwt_secret_key
+JANUA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----...  # Or use JWKS endpoint
+
+# Payment Providers (via Janua plugins - configure ones you need)
+STRIPE_SECRET_KEY=sk_test_...           # Default: US/EU/Global
+STRIPE_WEBHOOK_SECRET=whsec_...
+CONEKTA_API_KEY=key_...                  # Optional: Mexico/LATAM
+POLAR_ACCESS_TOKEN=...                   # Optional: Open source
 
 # Optional
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
 NLP_SERVICE_URL=http://localhost:8000

@@ -261,7 +261,8 @@ services/
 ├── speech-client.ts     # Speech service client
 ├── anki.ts              # Anki export
 ├── analytics.ts         # User analytics aggregation
-└── billing.ts           # Stripe billing
+├── billing.ts           # Multi-provider billing (via Janua)
+└── janua.ts             # Janua auth client
 ```
 
 **Middleware Stack**:
@@ -446,23 +447,31 @@ Client A                    Server                    Client B
 
 ## Security
 
-### Authentication Flow
+### Authentication & Billing (Janua)
+
+All authentication and monetization is handled through [Janua](https://github.com/madfam-io/janua), providing a unified auth/billing layer:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        Janua Auth                                 │
+│                        Janua Platform                             │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│   Supported Methods:                                              │
-│   - Email/password                                                │
-│   - Google OAuth                                                  │
-│   - GitHub OAuth                                                  │
-│   - Microsoft OAuth                                               │
+│   Authentication:                                                 │
+│   - Email/password, Google, GitHub, Microsoft OAuth              │
+│   - JWT tokens verified via JWKS or public key                   │
+│   - Access token: 15 min, Refresh token: 7 days                  │
+│   - Role-based access (subscriber:learner, subscriber:immersion) │
 │                                                                   │
-│   Token Lifecycle:                                                │
-│   - Access token: 15 minutes                                      │
-│   - Refresh token: 7 days                                         │
-│   - Automatic refresh in clients                                  │
+│   Billing (via Janua plugins):                                   │
+│   - Stripe: Default (US, EU, global)                             │
+│   - Conekta: Mexico and Latin America                            │
+│   - Polar: Open source friendly, developer-focused               │
+│   - Country-based provider auto-selection                        │
+│                                                                   │
+│   Subscription Tiers:                                             │
+│   - free: 10 cards/day, 500 vocab limit, no AI                   │
+│   - learner: 50 cards/day, 5000 vocab, 100 AI/month              │
+│   - immersion: Unlimited everything                               │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```

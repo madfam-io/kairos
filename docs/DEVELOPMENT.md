@@ -94,15 +94,17 @@ DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
 # Janua Authentication
 JANUA_API_URL=http://localhost:4000
 JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
-JANUA_JWT_SECRET=your_jwt_secret_key
+JANUA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----...  # Or omit to use JWKS endpoint
 ```
 
 **Optional environment variables:**
 
 ```bash
-# Stripe (for billing)
-STRIPE_SECRET_KEY=sk_test_...
+# Payment Providers (via Janua plugins - configure ones you need)
+STRIPE_SECRET_KEY=sk_test_...           # Default: US/EU/Global
 STRIPE_WEBHOOK_SECRET=whsec_...
+CONEKTA_API_KEY=key_...                  # Optional: Mexico/LATAM
+POLAR_ACCESS_TOKEN=...                   # Optional: Open source
 
 # Redis (uses in-memory by default)
 UPSTASH_REDIS_REST_URL=

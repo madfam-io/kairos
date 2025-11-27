@@ -866,24 +866,66 @@ Get user analytics summary. **Requires auth.**
 
 ### Billing
 
+Billing is handled through Janua with multiple payment provider plugins. The appropriate provider is selected based on user country or explicit choice.
+
+**Supported Providers:**
+- `stripe` - Default for US, EU, and global users
+- `conekta` - Mexico and Latin America
+- `polar` - Open source friendly, developer-focused
+
+**Subscription Tiers:**
+| Tier | Cards/Day | Vocab Limit | AI Simplifications | Anki Export |
+|------|-----------|-------------|-------------------|-------------|
+| `free` | 10 | 500 | 0 | No |
+| `learner` | 50 | 5,000 | 100/month | Yes |
+| `immersion` | Unlimited | Unlimited | Unlimited | Yes |
+
 #### POST /billing/subscribe
 
-Create subscription. **Requires auth.**
+Create subscription checkout session. **Requires auth.**
 
 **Request:**
 ```json
 {
   "tier": "learner",
-  "interval": "monthly"
+  "interval": "monthly",
+  "provider": "stripe",
+  "countryCode": "US"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tier` | string | `learner` or `immersion` |
+| `interval` | string | `monthly` or `yearly` |
+| `provider` | string | Optional: `stripe`, `conekta`, `polar` |
+| `countryCode` | string | Optional: ISO country code for auto-selection |
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "checkoutUrl": "https://checkout.stripe.com/..."
+    "checkoutUrl": "https://checkout.stripe.com/...",
+    "provider": "stripe"
+  }
+}
+```
+
+#### GET /billing/subscription
+
+Get current subscription status. **Requires auth.**
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tier": "learner",
+    "provider": "stripe",
+    "status": "active",
+    "currentPeriodEnd": "2025-02-15T00:00:00Z",
+    "cancelAtPeriodEnd": false
   }
 }
 ```
@@ -891,6 +933,11 @@ Create subscription. **Requires auth.**
 #### GET /billing/portal
 
 Get customer portal URL. **Requires auth.**
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Payment provider (defaults to active subscription's provider) |
 
 **Response:**
 ```json
@@ -902,9 +949,44 @@ Get customer portal URL. **Requires auth.**
 }
 ```
 
-#### POST /billing/webhook
+#### POST /billing/cancel
 
-Stripe webhook endpoint. **No auth** (verified by Stripe signature).
+Cancel subscription at period end. **Requires auth.**
+
+#### POST /billing/resume
+
+Resume cancelled subscription. **Requires auth.**
+
+#### GET /billing/pricing
+
+Get pricing information for all providers.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "stripe": {
+      "learner": { "monthly": 8, "yearly": 80, "currency": "USD" },
+      "immersion": { "monthly": 12, "yearly": 120, "currency": "USD" }
+    },
+    "conekta": {
+      "learner": { "monthly": 149, "yearly": 1490, "currency": "MXN" },
+      "immersion": { "monthly": 229, "yearly": 2290, "currency": "MXN" }
+    },
+    "polar": {
+      "learner": { "monthly": 8, "yearly": 80, "currency": "USD" },
+      "immersion": { "monthly": 12, "yearly": 120, "currency": "USD" }
+    }
+  }
+}
+```
+
+#### POST /billing/webhook/:provider
+
+Payment provider webhook endpoint. **No auth** (verified by provider signature).
+
+Supported providers: `stripe`, `conekta`, `polar`
 
 ---
 
