@@ -88,30 +88,31 @@ code .env.local
 **Required environment variables:**
 
 ```bash
-# Supabase (required for auth/database)
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Database
+DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
 
-# Database (for local development with Docker)
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kairos
+# Janua Authentication
+JANUA_API_URL=http://localhost:4000
+JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
+JANUA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----...  # Or omit to use JWKS endpoint
 ```
 
 **Optional environment variables:**
 
 ```bash
-# Stripe (for billing)
-STRIPE_PUBLIC_KEY=pk_test_...
-STRIPE_SECRET_KEY=sk_test_...
+# Payment Providers (via Janua plugins - configure ones you need)
+STRIPE_SECRET_KEY=sk_test_...           # Default: US/EU/Global
 STRIPE_WEBHOOK_SECRET=whsec_...
-
-# Modal (for AI services - uses hosted endpoints by default)
-MODAL_TOKEN_ID=
-MODAL_TOKEN_SECRET=
+CONEKTA_API_KEY=key_...                  # Optional: Mexico/LATAM
+POLAR_ACCESS_TOKEN=...                   # Optional: Open source
 
 # Redis (uses in-memory by default)
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+
+# AI Services (local Docker URLs)
+NLP_SERVICE_URL=http://localhost:8000
+SIMPLIFY_SERVICE_URL=http://localhost:8001
 
 # Analytics
 SENTRY_DSN=
@@ -120,13 +121,13 @@ POSTHOG_KEY=
 
 ### 4. Database Setup
 
-**Option A: Use Supabase (recommended)**
-
-1. Create a project at [supabase.com](https://supabase.com)
-2. Copy the URL and keys to `.env.local`
-3. Run migrations:
+**Option A: Docker Compose (recommended)**
 
 ```bash
+# Start all local services (PostgreSQL, Redis, AI services)
+docker compose up -d
+
+# Run migrations
 pnpm --filter @kairos/api db:push
 ```
 
@@ -262,7 +263,7 @@ pip install -e ".[dev]"
 python -m src.main
 ```
 
-For production, services use Modal endpoints.
+For production, services are deployed via Docker/Enclii.
 
 ## Testing
 
@@ -300,15 +301,16 @@ pnpm --filter @kairos/api test:e2e --ui
 ```
 apps/api/
 ├── src/
-│   └── routes/
-│       └── vocabulary.ts
-└── tests/
-    ├── unit/
-    │   └── vocabulary.test.ts
-    ├── integration/
-    │   └── vocabulary.integration.test.ts
-    └── e2e/
-        └── vocabulary.e2e.test.ts
+│   ├── routes/
+│   │   └── vocabulary.ts
+│   └── __tests__/
+│       ├── vocabulary.test.ts
+│       ├── auth.test.ts
+│       ├── middleware.test.ts
+│       ├── helpers/
+│       │   └── test-utils.ts
+│       └── services/
+│           └── billing.test.ts
 ```
 
 ## Code Style
@@ -427,13 +429,16 @@ const due = await db.query.vocabulary.findMany({
 
 ## AI Services
 
-### Using Hosted Services (Default)
+### Using Docker Compose (Recommended)
 
-By default, the API calls Modal-hosted endpoints. No configuration needed.
+```bash
+# Start all AI services
+docker compose up -d nlp simplify pitch speech
+```
 
 ### Local Development
 
-To run AI services locally:
+To run AI services locally without Docker:
 
 ```bash
 # NLP Service
@@ -449,17 +454,17 @@ mv data/cedict.txt data/cedict_ts.u8
 python -m src.main  # http://localhost:8000
 ```
 
-### Deploying to Modal
+### Deploying to Production
 
 ```bash
-cd services/nlp
-modal deploy modal_app.py
+# Deploy via Enclii
+enclii deploy
 
-cd services/pitch
-modal deploy modal_pitch.py
-
-cd services/simplify
-modal deploy modal_app.py
+# Or build Docker images manually
+docker build -t kairos-nlp ./services/nlp
+docker build -t kairos-simplify ./services/simplify
+docker build -t kairos-pitch ./services/pitch
+docker build -t kairos-speech ./services/speech
 ```
 
 ## Debugging
@@ -541,14 +546,17 @@ pnpm --filter @kairos/desktop clean
 pnpm --filter @kairos/desktop build
 ```
 
-### Modal deployment fails
+### Docker services fail to start
 
 ```bash
-# Re-authenticate
-modal token new
+# Check logs
+docker compose logs nlp
 
-# Check Python version
-python --version  # Should be 3.10+
+# Restart services
+docker compose restart
+
+# Rebuild if needed
+docker compose build --no-cache
 ```
 
 ## Related Documents

@@ -260,23 +260,24 @@ pnpm lint:fix
 ### Test Structure
 
 ```
-src/
+apps/api/src/
 ├── routes/
 │   └── vocabulary.ts
-tests/
-├── unit/
-│   └── vocabulary.test.ts
-├── integration/
-│   └── vocabulary.integration.test.ts
-└── e2e/
-    └── vocabulary.e2e.test.ts
+└── __tests__/
+    ├── vocabulary.test.ts
+    ├── auth.test.ts
+    ├── middleware.test.ts
+    ├── helpers/
+    │   └── test-utils.ts
+    └── services/
+        └── billing.test.ts
 ```
 
 ### Writing Tests
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { calculateNextReview } from '../src/utils/srs';
+import { describe, it, expect } from 'bun:test';
+import { calculateNextReview } from '../utils/srs';
 
 describe('calculateNextReview', () => {
   it('should schedule easy cards further out', () => {

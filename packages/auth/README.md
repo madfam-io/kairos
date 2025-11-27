@@ -1,13 +1,13 @@
 # @kairos/auth
 
-Authentication utilities for Kairos applications.
+Authentication utilities for Kairos applications using Janua SSO.
 
 ## Overview
 
 This package provides:
-- Supabase Auth client wrapper
-- React hooks and context for authentication
-- Token management with Zustand
+- Janua Auth client for authentication
+- React hooks and context for authentication state
+- Token management with automatic refresh
 - Type-safe authentication utilities
 
 ## Installation
@@ -24,27 +24,45 @@ This package is internal to the Kairos monorepo. It's automatically available to
 
 ## Usage
 
-### Node.js / Backend
+### Client Setup
 
 ```typescript
-import { createAuthClient } from '@kairos/auth';
+import { JanuaAuthClient } from '@kairos/auth';
 
-const auth = createAuthClient({
-  supabaseUrl: process.env.SUPABASE_URL,
-  supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+const auth = new JanuaAuthClient({
+  baseUrl: process.env.API_URL || 'https://api.kairos.dev',
+  storage: 'localStorage', // or 'sessionStorage' or 'memory'
+  onSessionChange: (session) => {
+    console.log('Session changed:', session);
+  },
 });
 
-// Verify JWT token
-const { user, error } = await auth.verifyToken(token);
-
-// Admin operations
-const { user } = await auth.admin.createUser({
+// Login
+const session = await auth.login({
   email: 'user@example.com',
   password: 'secure-password',
 });
+
+// Register
+const session = await auth.register({
+  email: 'user@example.com',
+  password: 'secure-password',
+});
+
+// Logout
+await auth.logout();
+
+// Get current user
+const user = auth.getUser();
+
+// Check if authenticated
+const isAuthenticated = auth.isAuthenticated();
+
+// Get access token (auto-refreshes if expired)
+const token = await auth.getAccessToken();
 ```
 
-### React
+### React Integration
 
 ```typescript
 import { AuthProvider, useAuth } from '@kairos/auth/react';
@@ -52,7 +70,7 @@ import { AuthProvider, useAuth } from '@kairos/auth/react';
 // Wrap your app
 function App() {
   return (
-    <AuthProvider>
+    <AuthProvider baseUrl="https://api.kairos.dev">
       <YourApp />
     </AuthProvider>
   );
@@ -81,22 +99,37 @@ function Profile() {
 
 ## API Reference
 
-### createAuthClient(config)
+### JanuaAuthClient
 
 Creates a new auth client instance.
 
 ```typescript
-interface AuthClientConfig {
-  supabaseUrl: string;
-  supabaseKey: string;
-  options?: {
-    autoRefreshToken?: boolean;
-    persistSession?: boolean;
-  };
+interface JanuaAuthConfig {
+  baseUrl: string;
+  clientId?: string;
+  storage?: 'localStorage' | 'sessionStorage' | 'memory';
+  onSessionChange?: (session: AuthSession | null) => void;
 }
 
-const client = createAuthClient(config);
+const client = new JanuaAuthClient(config);
 ```
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `login(credentials)` | Login with email/password |
+| `register(credentials)` | Register new account |
+| `logout()` | Logout and clear session |
+| `getSession()` | Get current session |
+| `getUser()` | Get current user |
+| `isAuthenticated()` | Check if authenticated |
+| `getAccessToken()` | Get access token (auto-refresh) |
+| `refreshSession()` | Manually refresh session |
+| `forgotPassword(email)` | Request password reset |
+| `resetPassword(token, password)` | Reset password with token |
+| `getOAuthUrl(provider)` | Get OAuth login URL |
+| `handleOAuthCallback(code)` | Handle OAuth callback |
 
 ### AuthProvider
 
@@ -105,11 +138,11 @@ React context provider for authentication state.
 ```typescript
 interface AuthProviderProps {
   children: React.ReactNode;
-  supabaseUrl?: string;
-  supabaseKey?: string;
+  baseUrl: string;
+  clientId?: string;
 }
 
-<AuthProvider supabaseUrl="..." supabaseKey="...">
+<AuthProvider baseUrl="https://api.kairos.dev">
   {children}
 </AuthProvider>
 ```
@@ -121,22 +154,22 @@ React hook for accessing auth state and methods.
 ```typescript
 interface UseAuthReturn {
   // State
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: AuthSession | null;
   isAuthenticated: boolean;
   loading: boolean;
-  error: Error | null;
+  error: AuthError | null;
 
   // Methods
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updatePassword: (password: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
 
   // OAuth
-  signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
+  getOAuthUrl: (provider: 'google' | 'github' | 'microsoft') => string;
+  handleOAuthCallback: (code: string, state?: string) => Promise<void>;
 }
 ```
 
@@ -144,14 +177,16 @@ interface UseAuthReturn {
 
 The package handles token lifecycle automatically:
 
-- **Access tokens**: 15-minute lifetime, auto-refreshed
+- **Access tokens**: 15-minute lifetime, auto-refreshed 5 minutes before expiry
 - **Refresh tokens**: 7-day lifetime, stored securely
-- **Session persistence**: Optional, uses secure storage
+- **Session persistence**: Configurable storage (localStorage, sessionStorage, or memory)
 
 ```typescript
 // Manual token access (if needed)
-const { session } = useAuth();
-const accessToken = session?.access_token;
+const token = await auth.getAccessToken();
+
+// Manual refresh
+await auth.refreshSession();
 ```
 
 ## Zustand Store
@@ -169,34 +204,32 @@ const clearSession = useAuthStore((state) => state.clearSession);
 
 ### Best Practices
 
-1. **Never expose service role key** - Use only on the backend
-2. **Validate tokens server-side** - Don't trust client claims
-3. **Use HTTPS** - Required for secure cookies
-4. **Enable RLS** - Row-level security in Supabase
+1. **Validate tokens server-side** - Don't trust client claims
+2. **Use HTTPS** - Required for secure token transmission
+3. **Secure storage** - Use `memory` storage for sensitive applications
+4. **Handle token expiry** - The client handles this automatically
 
-### Token Verification
+### Server-Side Verification
+
+For server-side JWT verification, use the Janua SDK in your API:
 
 ```typescript
-// In API middleware
-import { createAuthClient } from '@kairos/auth';
+// apps/api/src/middleware/auth.ts
+import { getJanuaClient } from '../services/janua';
 
-const auth = createAuthClient({ ... });
-
-async function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+async function authMiddleware(c, next) {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    throw new Error('Unauthorized');
   }
 
-  const { user, error } = await auth.verifyToken(token);
+  const janua = getJanuaClient();
+  const payload = await janua.verifyToken(token);
+  const user = janua.tokenToUser(payload);
 
-  if (error) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-
-  req.user = user;
-  next();
+  c.set('user', user);
+  await next();
 }
 ```
 
@@ -205,10 +238,9 @@ async function authMiddleware(req, res, next) {
 ```
 packages/auth/
 ├── src/
-│   ├── index.ts          # Main exports (Node.js)
+│   ├── index.ts          # Main exports
 │   ├── react.ts          # React exports
-│   ├── client.ts         # Supabase client wrapper
-│   ├── types.ts          # Type definitions
+│   ├── client.ts         # JanuaAuthClient
 │   └── store.ts          # Zustand store
 ├── package.json
 └── tsconfig.json
@@ -217,8 +249,8 @@ packages/auth/
 ## Exports
 
 ```typescript
-// Default export (Node.js)
-import { createAuthClient } from '@kairos/auth';
+// Default export
+import { JanuaAuthClient, AuthError } from '@kairos/auth';
 
 // React exports
 import {
@@ -227,12 +259,13 @@ import {
   useAuthStore,
 } from '@kairos/auth/react';
 
-// Types
+// Types (from @kairos/types)
 import type {
-  User,
-  Session,
-  AuthError,
-} from '@kairos/auth';
+  AuthUser,
+  AuthSession,
+  LoginCredentials,
+  RegisterCredentials,
+} from '@kairos/types';
 ```
 
 ## Related Documentation

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import type { AppEnv } from '../types';
 import { requireAuth } from '../middleware/auth';
 import { AppError } from '../middleware/error-handler';
+import { parsePagination } from '../lib/utils';
 import {
   createOrganization,
   getOrganization,
@@ -272,14 +273,13 @@ enterpriseRoutes.get('/organizations/:orgId/members', async (c) => {
   const departmentId = c.req.query('departmentId');
   const role = c.req.query('role') as OrgRole | undefined;
   const isActive = c.req.query('isActive');
-  const limit = parseInt(c.req.query('limit') || '50', 10);
-  const offset = parseInt(c.req.query('offset') || '0', 10);
+  const { limit, offset } = parsePagination(c, { defaultLimit: 50 });
 
   const members = await getOrgMembers(orgId, {
     departmentId: departmentId || undefined,
     role,
     isActive: isActive !== undefined ? isActive === 'true' : undefined,
-    limit: Math.min(limit, 100),
+    limit,
     offset,
   });
 
@@ -681,13 +681,12 @@ enterpriseRoutes.get('/organizations/:orgId/audit-logs', async (c) => {
 
   await requireOrgAccess(user.id, orgId, 'settings');
 
-  const limit = parseInt(c.req.query('limit') || '50', 10);
-  const offset = parseInt(c.req.query('offset') || '0', 10);
+  const { limit, offset } = parsePagination(c, { defaultLimit: 50 });
   const actorId = c.req.query('actorId');
   const action = c.req.query('action');
 
   const logs = await getAuditLogs(orgId, {
-    limit: Math.min(limit, 100),
+    limit,
     offset,
     actorId: actorId || undefined,
     action: action || undefined,

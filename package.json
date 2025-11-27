@@ -22,6 +22,7 @@
     "clean": "turbo run clean && rm -rf node_modules .turbo",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
+    "verify:docs": "bun run scripts/verify-docs.ts",
     "prepare": "husky"
   },
   "devDependencies": {

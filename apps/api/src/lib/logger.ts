@@ -136,6 +136,12 @@ export const log = {
       `Rate limit exceeded for ${ip} on ${endpoint}`
     ),
 
+  security: (message: string, context?: Record<string, unknown>) =>
+    logger.warn(
+      { event: 'security', ...context },
+      `[SECURITY] ${message}`
+    ),
+
   // Business events
   userAction: (
     userId: string,

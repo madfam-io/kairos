@@ -156,15 +156,15 @@ kairos/
 |-------|------------|
 | **Monorepo** | pnpm workspaces + Turborepo |
 | **API** | Bun + Hono + Drizzle ORM |
-| **Database** | PostgreSQL (Supabase) |
+| **Database** | PostgreSQL |
 | **Cache** | Redis (Upstash) |
-| **Auth** | Supabase Auth |
+| **Auth** | Janua SSO |
 | **Desktop** | Tauri 2 + React |
 | **Mobile** | React Native + Expo 52 |
 | **Extension** | Plasmo (Chrome MV3) |
-| **AI Services** | Modal (serverless GPU) |
+| **AI Services** | Docker containers (Enclii) |
 | **NLP** | PaddleNLP LAC |
-| **LLM** | Qwen2.5-7B-Instruct |
+| **LLM** | Qwen3-30B-A3B |
 | **Pitch** | FCPE |
 
 ## Scripts
@@ -184,23 +184,25 @@ kairos/
 See [.env.example](.env.example) for required environment variables:
 
 ```bash
-# Supabase
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+# Database
+DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
 
-# Stripe
-STRIPE_PUBLIC_KEY=
+# Janua Authentication
+JANUA_API_URL=http://localhost:4000
+JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
+JANUA_JWT_SECRET=your_jwt_secret_key
+
+# Payment Providers
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-
-# Modal (AI Services)
-MODAL_TOKEN_ID=
-MODAL_TOKEN_SECRET=
 
 # Upstash Redis
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+
+# AI Services (internal Docker network)
+NLP_SERVICE_URL=http://nlp:8000
+SIMPLIFY_SERVICE_URL=http://simplify:8001
 
 # Analytics (Optional)
 SENTRY_DSN=

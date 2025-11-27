@@ -333,6 +333,37 @@ export async function makeRequest(
   return { res, json, status: res.status };
 }
 
+// FormData request helper
+export async function makeFormDataRequest(
+  app: { request: (path: string, init?: RequestInit) => Promise<Response> },
+  method: string,
+  path: string,
+  formData: FormData,
+  options: {
+    headers?: Record<string, string>;
+    auth?: Partial<typeof testUser> | false;
+  } = {}
+) {
+  const headers: Record<string, string> = {
+    ...options.headers,
+  };
+
+  if (options.auth !== false) {
+    const token = await createMockToken(options.auth || testUser);
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await app.request(path, {
+    method,
+    headers,
+    body: formData,
+  });
+
+  const json = await res.json().catch(() => null);
+
+  return { res, json, status: res.status };
+}
+
 // Shorthand request methods
 export function createRequestHelpers(app: { request: (path: string, init?: RequestInit) => Promise<Response> }) {
   return {
@@ -340,6 +371,8 @@ export function createRequestHelpers(app: { request: (path: string, init?: Reque
       makeRequest(app, 'GET', path, options),
     post: (path: string, body?: unknown, options?: Parameters<typeof makeRequest>[3]) =>
       makeRequest(app, 'POST', path, { ...options, body }),
+    postForm: (path: string, formData: FormData, options?: Parameters<typeof makeFormDataRequest>[4]) =>
+      makeFormDataRequest(app, 'POST', path, formData, options),
     patch: (path: string, body?: unknown, options?: Parameters<typeof makeRequest>[3]) =>
       makeRequest(app, 'PATCH', path, { ...options, body }),
     put: (path: string, body?: unknown, options?: Parameters<typeof makeRequest>[3]) =>

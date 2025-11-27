@@ -1,27 +1,24 @@
 # Kairos AI Simplification Service
 
-AI-powered Chinese sentence simplification using Qwen2.5-7B-Instruct.
+AI-powered Chinese sentence simplification using Qwen3-30B-A3B.
 
 ## Features
 
 - Simplify Chinese sentences to target HSK levels (1-6)
 - Batch processing support
 - Result caching (Redis or in-memory)
-- Deployed on Modal with GPU acceleration (vLLM)
+- Deployed via Docker/Enclii with GPU acceleration (vLLM)
 
 ## Quick Start
 
-### Deploy to Modal (Recommended)
+### Docker Deployment (Recommended)
 
 ```bash
-# Install Modal CLI
-pip install modal
+# Build the image
+docker build -t kairos-simplify .
 
-# Authenticate
-modal token new
-
-# Deploy
-modal deploy modal_app.py
+# Run with GPU
+docker run --gpus all -p 8001:8001 kairos-simplify
 ```
 
 ### Local Development
@@ -30,8 +27,15 @@ modal deploy modal_app.py
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run local server (calls Modal endpoint)
+# Run local server
 python -m src.main
+```
+
+### Enclii Deployment
+
+```bash
+# Deploy all services
+enclii deploy
 ```
 
 ## API Endpoints
@@ -85,8 +89,8 @@ Health check endpoint.
 
 ## Model Information
 
-- **Model**: Qwen/Qwen2.5-7B-Instruct
-- **GPU**: A10G (Modal)
+- **Model**: Qwen/Qwen3-30B-A3B
+- **GPU**: A10G (24GB VRAM required)
 - **Inference**: vLLM with flash attention
 - **Max tokens**: 512
 - **Temperature**: 0.3
@@ -101,12 +105,12 @@ Health check endpoint.
 | HSK 5 | Advanced, abstract topics |
 | HSK 6 | Near-native vocabulary |
 
-## Cost Estimation (Modal)
+## Resource Requirements
 
-- A10G GPU: ~$0.75/hour
+- A10G GPU: 24GB VRAM minimum
 - Average request: ~1-2 seconds
-- Cold start: ~30 seconds (cached container: instant)
-- Estimated cost: ~$0.0004 per simplification
+- Cold start: ~30 seconds (model loading)
+- Estimated cost: ~$0.0004 per simplification (self-hosted)
 
 ## License
 

@@ -20,7 +20,7 @@ The API provides endpoints for:
 | [Bun](https://bun.sh) | JavaScript runtime |
 | [Hono](https://hono.dev) | Web framework |
 | [Drizzle ORM](https://orm.drizzle.team) | Database ORM |
-| [PostgreSQL](https://postgresql.org) | Database (via Supabase) |
+| [PostgreSQL](https://postgresql.org) | Database |
 | [Zod](https://zod.dev) | Schema validation |
 
 ## Quick Start
@@ -44,16 +44,23 @@ Create `.env.local` in the repository root:
 
 ```bash
 # Required
-DATABASE_URL=postgresql://...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgres://kairos:kairos@localhost:5432/kairos
+
+# Janua Authentication (https://github.com/madfam-io/janua)
+JANUA_API_URL=http://localhost:4000
+JANUA_PUBLISHABLE_KEY=pk_your_publishable_key
+JANUA_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----...  # Or use JWKS endpoint
+
+# Payment Providers (via Janua plugins - configure ones you need)
+STRIPE_SECRET_KEY=sk_test_...           # Default: US/EU/Global
+STRIPE_WEBHOOK_SECRET=whsec_...
+CONEKTA_API_KEY=key_...                  # Optional: Mexico/LATAM
+POLAR_ACCESS_TOKEN=...                   # Optional: Open source
 
 # Optional
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
 UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
+NLP_SERVICE_URL=http://localhost:8000
 ```
 
 ## Project Structure
@@ -77,23 +84,50 @@ apps/api/
 │   │   ├── speech.ts         # TTS synthesis
 │   │   ├── sync.ts           # CRDT synchronization
 │   │   ├── analytics.ts      # Event tracking
-│   │   └── billing.ts        # Stripe integration
+│   │   ├── billing.ts        # Stripe integration
+│   │   ├── developer.ts      # Developer Platform API
+│   │   └── enterprise.ts     # Enterprise/Organization API
 │   ├── services/
+│   │   ├── developer/        # Developer Platform services
+│   │   │   ├── types.ts      # ApiScope, WebhookEvent, token types
+│   │   │   ├── applications.ts  # OAuth client CRUD
+│   │   │   ├── api-keys.ts   # API key management
+│   │   │   ├── oauth.ts      # OAuth2 authorization (PKCE)
+│   │   │   ├── webhooks.ts   # Webhook dispatch/delivery
+│   │   │   ├── usage.ts      # API usage logging
+│   │   │   ├── integrations.ts  # External providers
+│   │   │   └── index.ts      # Barrel export
+│   │   ├── organization/     # Enterprise Organization services
+│   │   │   ├── types.ts      # OrgRole, LicenseTier, analytics
+│   │   │   ├── core.ts       # Organization CRUD
+│   │   │   ├── members.ts    # Member management
+│   │   │   ├── departments.ts  # Department CRUD
+│   │   │   ├── invites.ts    # Invitations/bulk provisioning
+│   │   │   ├── decks.ts      # Organization deck library
+│   │   │   ├── licenses.ts   # License management
+│   │   │   ├── audit.ts      # Audit logging
+│   │   │   ├── analytics.ts  # Learning analytics
+│   │   │   ├── permissions.ts  # Role-based access control
+│   │   │   └── index.ts      # Barrel export
 │   │   ├── nlp-client.ts     # NLP service client
 │   │   ├── pitch-client.ts   # Pitch service client
-│   │   ├── simplify-client.ts# Simplification client
+│   │   ├── simplify-client.ts  # Simplification client
 │   │   ├── speech-client.ts  # Speech service client
 │   │   ├── anki.ts           # Anki export
 │   │   ├── analytics.ts      # Analytics aggregation
 │   │   └── billing.ts        # Stripe billing
+│   ├── lib/
+│   │   └── utils.ts          # Shared utilities (pagination, tokens, etc.)
 │   └── middleware/
 │       ├── auth.ts           # JWT authentication
 │       ├── error-handler.ts  # Error handling
 │       └── rate-limiter.ts   # Rate limiting
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
+│   └── __tests__/
+│       ├── auth.test.ts
+│       ├── vocabulary.test.ts
+│       ├── middleware.test.ts
+│       ├── helpers/
+│       └── services/
 ├── drizzle.config.ts         # Drizzle configuration
 ├── package.json
 └── tsconfig.json
@@ -202,7 +236,7 @@ For complete API documentation, see [API Reference](../../docs/API.md).
 
 ### Authentication
 
-JWT verification via Supabase:
+JWT verification via Janua:
 
 ```typescript
 // Protected route
@@ -263,7 +297,7 @@ pnpm test:watch
 
 ```bash
 fly launch
-fly secrets set DATABASE_URL="..." SUPABASE_URL="..."
+fly secrets set DATABASE_URL="..." JANUA_API_URL="..."
 fly deploy
 ```
 

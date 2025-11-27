@@ -39,7 +39,7 @@ This document describes the high-level architecture, design decisions, and techn
         ▼                         ▼                         ▼
 ┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
 │  Auth Service │       │   PostgreSQL    │       │  AI Services    │
-│  (Supabase)   │       │   (Supabase)    │       │    (Modal)      │
+│   (Janua)     │       │                 │       │   (Docker)      │
 │               │       │                 │       │                 │
 │ - JWT tokens  │       │ - Users         │       │ - NLP           │
 │ - OAuth       │       │ - Vocabulary    │       │ - Simplify      │
@@ -103,7 +103,7 @@ Users should be able to learn without internet:
 ### 4. Cost-Efficient AI
 
 Proprietary APIs (GPT-4, Claude) destroy margins at scale:
-- **Self-hosted Qwen2.5-7B** on Modal ($0.0004/request vs $0.01+)
+- **Self-hosted Qwen3-30B-A3B** via Docker/Enclii ($0.0004/request vs $0.01+)
 - **Aggressive caching** for repeated sentences
 - **Pre-computed simplifications** for popular shows
 
@@ -226,9 +226,44 @@ Proprietary APIs (GPT-4, Claude) destroy margins at scale:
 | Component | Purpose |
 |-----------|---------|
 | `routes/` | API endpoint handlers |
-| `services/` | Business logic and external integrations |
+| `services/` | Business logic modules (organized by domain) |
+| `lib/` | Shared utilities (pagination, tokens, hashing) |
 | `middleware/` | Auth, rate limiting, error handling |
 | `db/` | Drizzle schema and queries |
+
+**Service Architecture**:
+```
+services/
+├── developer/           # Developer Platform APIs
+│   ├── types.ts         # ApiScope, WebhookEvent, token types
+│   ├── applications.ts  # OAuth client CRUD
+│   ├── api-keys.ts      # API key management
+│   ├── oauth.ts         # OAuth2 authorization flow (PKCE)
+│   ├── webhooks.ts      # Webhook dispatch and delivery
+│   ├── usage.ts         # API usage logging and stats
+│   ├── integrations.ts  # External provider connections
+│   └── index.ts         # Barrel export
+├── organization/        # Enterprise Organization APIs
+│   ├── types.ts         # OrgRole, LicenseTier, analytics types
+│   ├── core.ts          # Organization CRUD
+│   ├── members.ts       # Member management
+│   ├── departments.ts   # Department CRUD
+│   ├── invites.ts       # Invitations and bulk provisioning
+│   ├── decks.ts         # Organization deck library
+│   ├── licenses.ts      # License and seat management
+│   ├── audit.ts         # Audit logging
+│   ├── analytics.ts     # Learning analytics
+│   ├── permissions.ts   # Role-based access control
+│   └── index.ts         # Barrel export
+├── nlp-client.ts        # NLP service client
+├── pitch-client.ts      # Pitch service client
+├── simplify-client.ts   # Simplification client
+├── speech-client.ts     # Speech service client
+├── anki.ts              # Anki export
+├── analytics.ts         # User analytics aggregation
+├── billing.ts           # Multi-provider billing (via Janua)
+└── janua.ts             # Janua auth client
+```
 
 **Middleware Stack**:
 ```
@@ -266,7 +301,7 @@ Request
 
 ## AI Services
 
-All AI services are deployed on [Modal](https://modal.com) for serverless GPU inference.
+All AI services run as Docker containers, deployed locally via Docker Compose or in production via [Enclii](https://github.com/madfam-io/enclii).
 
 ### NLP Service (services/nlp)
 
@@ -288,7 +323,7 @@ All AI services are deployed on [Modal](https://modal.com) for serverless GPU in
 
 ### Simplification Service (services/simplify)
 
-**Model**: Qwen2.5-7B-Instruct (vLLM)
+**Model**: Qwen3-30B-A3B (vLLM)
 
 **Capabilities**:
 - Rewrite sentences to target HSK level
@@ -412,23 +447,31 @@ Client A                    Server                    Client B
 
 ## Security
 
-### Authentication Flow
+### Authentication & Billing (Janua)
+
+All authentication and monetization is handled through [Janua](https://github.com/madfam-io/janua), providing a unified auth/billing layer:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     Supabase Auth                                 │
+│                        Janua Platform                             │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│   Supported Methods:                                              │
-│   - Email/password                                                │
-│   - Google OAuth                                                  │
-│   - Apple OAuth (required for iOS)                                │
-│   - Magic link (passwordless)                                     │
+│   Authentication:                                                 │
+│   - Email/password, Google, GitHub, Microsoft OAuth              │
+│   - JWT tokens verified via JWKS or public key                   │
+│   - Access token: 15 min, Refresh token: 7 days                  │
+│   - Role-based access (subscriber:learner, subscriber:immersion) │
 │                                                                   │
-│   Token Lifecycle:                                                │
-│   - Access token: 15 minutes                                      │
-│   - Refresh token: 7 days                                         │
-│   - Automatic refresh in clients                                  │
+│   Billing (via Janua plugins):                                   │
+│   - Stripe: Default (US, EU, global)                             │
+│   - Conekta: Mexico and Latin America                            │
+│   - Polar: Open source friendly, developer-focused               │
+│   - Country-based provider auto-selection                        │
+│                                                                   │
+│   Subscription Tiers:                                             │
+│   - free: 10 cards/day, 500 vocab limit, no AI                   │
+│   - learner: 50 cards/day, 5000 vocab, 100 AI/month              │
+│   - immersion: Unlimited everything                               │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
